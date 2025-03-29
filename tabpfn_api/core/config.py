@@ -43,6 +43,8 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
         # Allow case-insensitive environment variable names
         case_sensitive = False
+        # Ignore extra environment variables not defined in the model
+        extra = 'ignore'
 
 
 # Use lru_cache to create a singleton instance of Settings

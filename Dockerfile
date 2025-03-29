@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.11-slim
+FROM python:3.11
 
 # Set the working directory in the container
 WORKDIR /app
@@ -9,16 +9,19 @@ ENV PYTHONDONTWRITEBYTECODE 1
 # Ensure Python output is sent straight to terminal (useful for logs)
 ENV PYTHONUNBUFFERED 1
 
+# Copy only requirements first to leverage Docker cache
+COPY requirements.txt .
+
 # Install system dependencies if needed (e.g., for psycopg2 build, though -binary should avoid this)
 # RUN apt-get update && apt-get install -y --no-install-recommends \
 #     build-essential libpq-dev \
 #  && rm -rf /var/lib/apt/lists/*
 
-# Install pip requirements
-# Copy only requirements first to leverage Docker cache
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Update pip first
+RUN pip install --no-cache-dir --upgrade pip
+
+# Install ALL requirements from the file 
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 COPY . .

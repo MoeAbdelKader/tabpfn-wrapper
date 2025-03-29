@@ -22,13 +22,13 @@
 ### Milestone 2: Core Authentication
 
 *   **Goal:** Allow users to securely register their TabPFN token and get an API key for our service.
-*   [ ] Define Database Models (`tabpfn_api/models/user.py`): Create `User` model (stores user ID, hashed API key, encrypted TabPFN token, timestamp).
-*   [ ] Set up Database Connection (`tabpfn_api/db/database.py`): Configure SQLAlchemy engine and session handling for SQLite.
-*   [ ] Initialize Database Schema: Add logic to create tables (`metadata.create_all()`) on startup or via a simple script.
-*   [ ] Implement TabPFN Interface Function (`tabpfn_api/tabpfn_interface/client.py`): Create a function `verify_tabpfn_token(token: str) -> bool` that uses `tabpfn-client` (e.g., attempts `get_api_usage`) to check if a token is valid. Handle exceptions from `tabpfn-client`.
-*   [ ] Implement Authentication Service Logic (`tabpfn_api/services/auth_service.py`):
+*   [x] Define Database Models (`tabpfn_api/models/user.py`): Create `User` model (stores user ID, hashed API key, encrypted TabPFN token, timestamp).
+*   [x] Set up Database Connection (`tabpfn_api/db/database.py`): Configure SQLAlchemy engine and session handling for PostgreSQL (Note: used PostgreSQL, not SQLite as originally written).
+*   [x] Initialize Database Schema: Add logic to create tables (`metadata.create_all()`) on startup or via a simple script.
+*   [x] Implement TabPFN Interface Function (`tabpfn_api/tabpfn_interface/client.py`): Create a function `verify_tabpfn_token(token: str) -> bool` that uses `tabpfn-client` (e.g., attempts `get_api_usage`) to check if a token is valid. Handle exceptions from `tabpfn-client`.
+*   [x] Implement Authentication Service Logic (`tabpfn_api/services/auth_service.py`):
     *   Function `setup_user(tabpfn_token: str) -> str`: Verifies token using interface, generates a unique API key (e.g., JWT or random string), hashes the API key, encrypts the TabPFN token, stores the mapping in the database, returns the *raw* API key.
-*   [ ] Implement API Endpoint (`tabpfn_api/api/auth.py`):
+*   [x] Implement API Endpoint (`tabpfn_api/api/auth.py`):
     *   `POST /auth/setup`: Takes `tabpfn_token` in request body, calls `auth_service.setup_user`, returns the generated API key. Use Pydantic for request body validation.
 *   [ ] Implement Authentication Middleware/Dependency (`tabpfn_api/core/security.py`):
     *   Create a FastAPI dependency (`get_current_user_token`) that:
