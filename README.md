@@ -4,7 +4,7 @@ This project provides a secure and managed RESTful API wrapper around the PriorL
 
 ## Goal
 
-The primary goal is to allow users to interact with the TabPFN API for training (`fit`) and prediction (`predict`) without directly managing or exposing their TabPFN access token on every request. Users register their TabPFN token once with this service and receive a service-specific API key for subsequent interactions.
+The primary goal is to allow users to interact with the TabPFN API for training (`fit`) and prediction (`predict`) via a RESTful API, allowing agnostic use of TabPFN via any programming language that can make HTTP requests. Users register their TabPFN token once with this service and receive a service-specific API key for subsequent interactions.
 
 ## Tech Stack
 
