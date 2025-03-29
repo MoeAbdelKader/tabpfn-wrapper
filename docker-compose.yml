@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    # Use --reload for development to automatically reload on code changes
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      # Mount the entire project directory into /app in the container
+      # This allows code changes to be reflected without rebuilding the image
+      - .:/app
+    ports:
+      - "8000:8000"
+    # Load environment variables from .env file in the project root
+    # These variables (DATABASE_URL, SECRET_KEY) are REQUIRED for the app to start
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy # Wait for DB healthcheck to pass
+
+  db:
+    image: postgres:15-alpine # Using Alpine for a smaller image size
+    volumes:
+      # Persist database data using a Docker volume
+      - postgres_data:/var/lib/postgresql/data/
+    # Environment variables for PostgreSQL itself are loaded from .env file
+    # These set the DB user, password, and database name on initial creation
+    env_file:
+      - .env
+    ports:
+      # Optionally expose the DB port to the host for debugging/inspection
+      # Be cautious about exposing DB ports in production environments
+      - "5432:5432"
+    healthcheck:
+        # Use variables from .env for the healthcheck command
+        test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-user} -d $${POSTGRES_DB:-tabpfndb}"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+
+volumes:
+  postgres_data:
+    # Define the volume for database persistence
+    # Data stored here will persist even if the container is removed and recreated 

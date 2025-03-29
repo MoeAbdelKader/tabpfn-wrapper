@@ -1,0 +1,23 @@
+# FastAPI
+fastapi
+uvicorn[standard]
+
+# Database (PostgreSQL)
+sqlalchemy
+psycopg2-binary # Or use psycopg2 if you have build prerequisites
+alembic # For migrations (good practice)
+
+# Data Validation & Settings
+pydantic[email]
+pydantic-settings # Replaces BaseSettings in Pydantic v2
+
+# Security
+cryptography
+passlib[bcrypt]
+python-jose[cryptography] # For potential JWT use later
+
+# TabPFN Client
+tabpfn-client
+
+# Dotenv support
+python-dotenv 
