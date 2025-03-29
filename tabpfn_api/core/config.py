@@ -18,13 +18,15 @@ class Settings(BaseSettings):
     """
 
     # --- Core Settings ---
-    # Default to the value used in docker-compose.yml for easy local setup
-    # In production, this MUST be set via environment variable.
+    # Default to the value used in docker-compose.yml for easy local setup.
+    # This default is safe as it points to the internal Docker network service 'db'.
+    # In production/other environments, this MUST be set via environment variable or .env file.
     DATABASE_URL: PostgresDsn 
 
     # Secret key for cryptographic operations (e.g., token encryption, JWT)
-    # It's CRITICAL to set this via environment variable in production.
+    # It's CRITICAL to set this via environment variable or .env file.
     # Generate a strong key, e.g., using: openssl rand -hex 32
+    # NO DEFAULT VALUE - This must be provided explicitly.
     SECRET_KEY: str
 
     # --- API Metadata ---
