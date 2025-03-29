@@ -18,10 +18,10 @@ class Settings(BaseSettings):
     """
 
     # --- Core Settings ---
-    # Default to the value used in docker-compose.yml for easy local setup.
-    # This default is safe as it points to the internal Docker network service 'db'.
-    # In production/other environments, this MUST be set via environment variable or .env file.
-    DATABASE_URL: PostgresDsn 
+    # PostgreSQL Database Connection URL
+    # Format: postgresql://<user>:<password>@<host>:<port>/<database>
+    # NO DEFAULT VALUE - This must be set via environment variable or .env file.
+    DATABASE_URL: PostgresDsn
 
     # Secret key for cryptographic operations (e.g., token encryption, JWT)
     # It's CRITICAL to set this via environment variable or .env file.
