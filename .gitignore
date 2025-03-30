@@ -167,3 +167,7 @@ Thumbs.db
 ehthumbs.db
 desktop.ini
 $RECYCLE.BIN/
+
+# Test artifacts
+*.db
+*.db-journal

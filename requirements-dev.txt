@@ -1,0 +1,6 @@
+pytest>=7.0.0
+httpx>=0.20.0
+pytest-asyncio>=0.18.0
+respx>=0.20.0 # For mocking HTTP requests (like the tabpfn client calls)
+aiosqlite>=0.17.0 # Add driver for async SQLite testing
+greenlet>=1.0.0 # Required by SQLAlchemy for async operations with some drivers 
