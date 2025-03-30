@@ -98,20 +98,9 @@ async def test_setup_user_internal_error(
 
 # --- Test Authentication Dependency (get_current_user_token) ---
 
-# Helper function to create a user and get their API key
-# Needs to be async and use the async session
-async def setup_test_user(client: AsyncClient, db: AsyncSession, tabpfn_token: str) -> str:
-    # Use the actual setup service function for consistency? Or endpoint?
-    # Using endpoint might be simpler for testing integration
-    response = await client.post(
-        f"{settings.API_V1_STR}/auth/setup",
-        json={"tabpfn_token": tabpfn_token}
-    )
-    assert response.status_code == status.HTTP_201_CREATED
-    api_key = response.json()["api_key"]
-    # Commit necessary because the subsequent GET request runs in a different context
-    await db.commit() # Commit the session used by the POST request
-    return api_key
+# REMOVE the setup_test_user helper function, use the fixture instead
+# async def setup_test_user(client: AsyncClient, db: AsyncSession, tabpfn_token: str) -> str:
+#    ...
 
 # The test router and protected endpoint (assuming it works with async get_db override)
 from fastapi import APIRouter, Depends
@@ -122,20 +111,32 @@ test_router = APIRouter()
 
 @test_router.get("/protected", tags=["Test Auth"])
 async def get_protected_resource(
-    user_tabpfn_token: str = Depends(security.get_current_user_token)
+    # Update dependency to use the renamed function get_current_user
+    # Also, update the expected type to User (or handle it accordingly)
+    # Since this is just a test endpoint, let's keep it simple and just get the user object
+    current_user: User = Depends(security.get_current_user) # Updated dependency
 ):
     """A dummy protected route to test authentication."""
-    return {"message": "Access granted", "tabpfn_token_snippet": user_tabpfn_token[:5]}
+    # We now get the full User object
+    # Let's return the user ID for verification
+    return {"message": "Access granted", "user_id": current_user.id}
 
 # Assume test_router is mounted by conftest.py
 
 async def test_auth_dependency_success(
     test_client: AsyncClient,
-    db_session: AsyncSession,
-    mock_verify_tabpfn_token: MagicMock
+    db_session: AsyncSession, # Keep db_session if needed elsewhere in test or for setup
+    authenticated_user_token: str, # Use the fixture
 ):
     """Test accessing a protected route with a valid API key."""
-    api_key = await setup_test_user(test_client, db_session, VALID_TABPFN_TOKEN)
+    api_key = authenticated_user_token # Use the key from the fixture
+
+    # We don't need to query the user directly if the endpoint verifies it.
+    # Just hitting the protected endpoint and checking the response is enough.
+    # hashed_key = security.get_api_key_hash(api_key)
+    # user = await db_session.scalar(select(User).where(User.hashed_api_key == hashed_key))
+    # assert user is not None, f"User created by fixture not found for key {api_key}"
+    # expected_user_id = user.id
 
     headers = {"Authorization": f"Bearer {api_key}"}
     response = await test_client.get("/test_auth/protected", headers=headers) # Use test prefix
@@ -143,32 +144,35 @@ async def test_auth_dependency_success(
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     assert data["message"] == "Access granted"
-    assert data["tabpfn_token_snippet"] == VALID_TABPFN_TOKEN[:5]
+    assert "user_id" in data # Check that the endpoint returned the user ID
+    assert isinstance(data["user_id"], int) # Basic type check for the ID
 
 async def test_auth_dependency_no_token(test_client: AsyncClient):
     """Test accessing protected route without providing a token."""
     response = await test_client.get("/test_auth/protected") # Use test prefix
     # Expect 403 Forbidden when auth header is missing/malformed by default
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    # Check detail message (FastAPI/Starlette might change this)
-    assert "Not authenticated" in response.json().get("detail", "")
+    # Check the actual detail message returned by FastAPI/Starlette
+    assert response.json().get("detail") == "Not authenticated"
 
 async def test_auth_dependency_invalid_scheme(test_client: AsyncClient):
     """Test accessing protected route with incorrect scheme (e.g., Basic)."""
     headers = {"Authorization": "Basic some_token"}
     response = await test_client.get("/test_auth/protected", headers=headers) # Use test prefix
-    # Expect 403 Forbidden when auth header is missing/malformed by default
+    # Expect 403 Forbidden when scheme is wrong (Based on observed behavior)
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    # Check the actual detail message returned by FastAPI/Starlette
-    assert "Invalid authentication credentials" in response.json().get("detail", "")
+    # Expect detail based on observed behavior
+    assert response.json().get("detail") == "Invalid authentication credentials"
 
 async def test_auth_dependency_invalid_token(
     test_client: AsyncClient,
     db_session: AsyncSession,
-    mock_verify_tabpfn_token: MagicMock
+    authenticated_user_token: str # Use the fixture to ensure a user exists
+    # Remove mock_verify_tabpfn_token
 ):
     """Test accessing protected route with an invalid/non-existent API key."""
-    await setup_test_user(test_client, db_session, VALID_TABPFN_TOKEN)
+    # Ensure a user exists via the fixture
+    _ = authenticated_user_token
 
     headers = {"Authorization": "Bearer invalid-api-key"}
     response = await test_client.get("/test_auth/protected", headers=headers) # Use test prefix
@@ -176,17 +180,6 @@ async def test_auth_dependency_invalid_token(
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
     assert "Could not validate credentials" in response.json().get("detail", "")
 
-async def test_auth_dependency_decryption_error(
-    test_client: AsyncClient,
-    db_session: AsyncSession,
-    mock_verify_tabpfn_token: MagicMock
-):
-    """Test scenario where token decryption fails (e.g., SECRET_KEY changed)."""
-    api_key = await setup_test_user(test_client, db_session, VALID_TABPFN_TOKEN)
-
-    with patch('tabpfn_api.core.security.decrypt_token', side_effect=security.InvalidToken):
-        headers = {"Authorization": f"Bearer {api_key}"}
-        response = await test_client.get("/test_auth/protected", headers=headers) # Use test prefix
-
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert "Could not validate credentials" in response.json().get("detail", "") 
+# test_auth_dependency_decryption_error no longer applicable as decryption is not done in the dependency
+# Remove or adapt if we want to test decryption failure elsewhere
+# async def test_auth_dependency_decryption_error(...) 

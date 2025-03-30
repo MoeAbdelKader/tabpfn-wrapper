@@ -22,6 +22,7 @@ from tabpfn_api.db.database import init_db
 # Import settings and the auth router
 from tabpfn_api.core.config import settings
 from tabpfn_api.api import auth as auth_router
+from tabpfn_api.api import models as models_router # Import the new models router
 # TODO: Add model router import here when created
 
 # --- TEMPORARY: Import and include test router for testing auth dependency ---
@@ -53,6 +54,7 @@ async def health_check():
 
 # Include API routers
 app.include_router(auth_router.router, prefix=f"{settings.API_V1_STR}/auth", tags=["Authentication"])
+app.include_router(models_router.router, prefix=f"{settings.API_V1_STR}/models", tags=["Models"]) # Add the models router
 
 # Placeholder for future imports and router includes
 # from tabpfn_api.api.v1 import api_router

@@ -3,6 +3,8 @@ import pytest
 import pytest_asyncio
 import os
 from typing import AsyncGenerator
+from unittest.mock import patch
+from fastapi import status
 
 # Use SQLAlchemy async features
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
@@ -15,6 +17,9 @@ from tabpfn_api.db.database import Base, get_db
 from main import app  # <-- Correctly import app from main.py in the root
 from tabpfn_api.core.config import settings
 from tests.test_api_auth import test_router as auth_test_router # <-- Import the test router
+from tabpfn_api.core.security import generate_api_key, get_api_key_hash, encrypt_token
+from tabpfn_api.services.auth_service import verify_tabpfn_token # Might be needed if helper uses it
+from tabpfn_api.models.user import User
 
 # Use a separate database for testing
 # Use in-memory SQLite with async driver
@@ -84,3 +89,24 @@ async def test_client(override_get_db) -> AsyncGenerator[AsyncClient, None]:
     # Clean up: remove the test router after the test runs
     # REMOVED - Directly modifying app.routes is not allowed/reliable.
     # app.routes = [route for route in app.routes if not hasattr(route, "router") or route.router != auth_test_router] 
+
+# Fixture to provide an authenticated user's API key
+@pytest_asyncio.fixture(scope="function")
+async def authenticated_user_token(
+    test_client: AsyncClient, # Depend on test_client
+    db_session: AsyncSession # Depend on db_session
+) -> str:
+    """Creates a test user and returns their valid API key."""
+    # We can reuse the helper logic, but adapt it for a fixture
+    valid_token = "fixture-valid-tabpfn-token" # Use a distinct token for fixture
+    # Mock verification for this specific token within the fixture scope
+    with patch('tabpfn_api.services.auth_service.verify_tabpfn_token', return_value=True):
+        response = await test_client.post(
+            f"{settings.API_V1_STR}/auth/setup",
+            json={"tabpfn_token": valid_token}
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        api_key = response.json()["api_key"]
+        # No commit needed here, db_session fixture handles transaction
+        await db_session.flush() # Ensure user is persisted for subsequent test steps
+        return api_key 

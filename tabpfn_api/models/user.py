@@ -1,5 +1,6 @@
 import datetime
 from sqlalchemy import Column, Integer, String, DateTime, LargeBinary, Index
+from sqlalchemy.orm import relationship # Import relationship
 from tabpfn_api.db.database import Base
 
 class User(Base):
@@ -22,6 +23,16 @@ class User(Base):
 
     # Timestamp for when the user record was created
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    # Define the one-to-many relationship to ModelMetadata
+    # 'back_populates' links this to the 'user' attribute in ModelMetadata
+    # 'cascade="all, delete-orphan"' ensures associated models are deleted if the user is deleted.
+    models = relationship(
+        "ModelMetadata",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True # Needed for ON DELETE CASCADE at DB level
+    )
 
 # Redundant index definition removed - SQLAlchemy creates index for unique=True columns automatically with create_all
 # Index("ix_users_hashed_api_key", User.hashed_api_key, unique=True) 

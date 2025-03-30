@@ -83,17 +83,18 @@ bearer_scheme = HTTPBearer(
     description="Your service-specific API key issued via /auth/setup."
 )
 
-async def get_current_user_token(
+async def get_current_user(
     token: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db)
-) -> str:
-    """FastAPI dependency to authenticate requests and return the decrypted TabPFN token.
+) -> User:
+    """FastAPI dependency to authenticate requests and return the authenticated User object.
 
-    Retrieves the Bearer token, finds the corresponding user by comparing hashes,
-    decrypts and returns the stored TabPFN token.
+    Retrieves the Bearer token, finds the corresponding user by comparing hashes.
+    The User object contains the ID and the encrypted TabPFN token.
 
     Raises:
         HTTPException(401): If the token is invalid, missing, or the user is not found.
+        HTTPException(500): For internal errors during authentication.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -105,7 +106,7 @@ async def get_current_user_token(
     log.debug(f"Attempting to authenticate user with provided API key.")
 
     try:
-        # Fetch all users asynchronously
+        # Fetch all users asynchronously (Keep note of performance concern here)
         stmt = select(User)
         result = await db.execute(stmt)
         users = result.scalars().all()
@@ -121,28 +122,16 @@ async def get_current_user_token(
             log.warning(f"Authentication failed: No user found for the provided API key.")
             raise credentials_exception
 
-        log.debug(f"Found matching user ID: {matched_user.id}")
-
-        # Decrypt the stored TabPFN token (sync)
-        decrypted_tabpfn_token = decrypt_token(matched_user.encrypted_tabpfn_token)
+        # We found the user, log success and return the user object
         log.info(f"Successfully authenticated user ID: {matched_user.id}")
-        return decrypted_tabpfn_token
+        return matched_user # Return the full User object
 
-    except InvalidToken:
-        # This occurs if the SECRET_KEY changed or the data is corrupt
-        log.error(
-            f"Could not decrypt TabPFN token for user ID: {getattr(matched_user, 'id', 'N/A')}. "
-            "Possible SECRET_KEY mismatch or data corruption.",
-            exc_info=True
-        )
-        # Let the credentials_exception (401) be raised
-        raise credentials_exception
     except HTTPException as http_exc:
         # Re-raise known HTTP exceptions (like our credentials_exception)
         raise http_exc
     except Exception as e:
-        # Catch *other* unexpected database or logic errors during lookup/decryption
-        log.exception(f"Unexpected error during token validation for key ending: ...{plain_api_key[-4:]}")
+        # Catch *other* unexpected database or logic errors during lookup
+        log.exception(f"Unexpected error during user lookup for key ending: ...{plain_api_key[-4:]}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error during authentication."

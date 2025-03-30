@@ -44,27 +44,27 @@
 ### Milestone 3: Core Modeling - `fit` Endpoint
 
 *   **Goal:** Allow authenticated users to train a TabPFN model.
-*   [ ] Define Database Model (`tabpfn_api/models/model.py`): Create `ModelMetadata` model (stores our internal `model_id`, the `train_set_uid` from TabPFN, `user_id` foreign key, timestamp, basic metadata like feature count/sample count).
-*   [ ] Implement TabPFN Interface Function (`tabpfn_api/tabpfn_interface/client.py`):
+*   [x] Define Database Model (`tabpfn_api/models/model.py`): Create `ModelMetadata` model (stores our internal `model_id`, the `train_set_uid` from TabPFN, `user_id` foreign key, timestamp, basic metadata like feature count/sample count).
+*   [x] Implement TabPFN Interface Function (`tabpfn_api/tabpfn_interface/client.py`):
     *   Function `fit_model(tabpfn_token: str, features: list, target: list, config: dict) -> str`:
         *   Converts input lists/dicts to NumPy arrays expected by `tabpfn-client`.
         *   Calls `ServiceClient.fit(X, y, **config)` using the provided `tabpfn_token`.
         *   Returns the `train_set_uid` from TabPFN.
         *   Handles data conversion errors and `tabpfn-client` exceptions.
-*   [ ] Implement Model Service Logic (`tabpfn_api/services/model_service.py`):
+*   [x] Implement Model Service Logic (`tabpfn_api/services/model_service.py`):
     *   Function `train_new_model(user_tabpfn_token: str, features: list, target: list, config: dict) -> str`:
         *   Calls the `tabpfn_interface.fit_model`.
         *   Generates a unique internal `model_id` (e.g., `uuid4`).
         *   Retrieves user ID based on the token (may need adjustment to auth dependency or service structure).
         *   Saves the mapping (`model_id`, `train_set_uid`, `user_id`, timestamp, metadata) to the `ModelMetadata` table.
         *   Returns the internal `model_id`.
-*   [ ] Implement API Endpoint (`tabpfn_api/api/models.py`):
+*   [x] Implement API Endpoint (`tabpfn_api/api/models.py`):
     *   `POST /models/fit`:
         *   Requires authentication (use the dependency from Milestone 2).
-        *   Takes features, target, and optional config in the request body (define Pydantic model).
+        *   Takes features (as a list of lists, where each inner list is a data row), target (as a list), and optional config dictionary in the JSON request body (define Pydantic model).
         *   Calls `model_service.train_new_model` with the authenticated user's TabPFN token.
         *   Returns the generated internal `model_id`.
-*   [ ] Add integration tests for the `/models/fit` endpoint, ensuring authentication is required and data is processed correctly (mocking the TabPFN call might be necessary for speed/reliability in tests).
+*   [x] Add integration tests for the `/models/fit` endpoint, ensuring authentication is required and data is processed correctly (mocking the TabPFN call might be necessary for speed/reliability in tests).
 
 ---
 
@@ -134,3 +134,5 @@
 *   [ ] Consider database migrations if schema evolves (using Alembic).
 *   [ ] Investigate caching for `predict` calls if performance becomes an issue.
 *   [ ] Investigate asynchronous task handling for long `fit`/`predict` calls if needed.
+*   [ ] Optimize db queries for get_current_user_token. (We currently retrieve all records from the db and loop through them)
+*   [  ] Add ability for users to upload CSV files

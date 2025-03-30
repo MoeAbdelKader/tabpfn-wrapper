@@ -1,4 +1,6 @@
 import logging
+import numpy as np
+from typing import List, Dict, Any
 # Reverting the debug imports - sys and traceback are no longer needed unless debugging further
 # import sys 
 # import traceback
@@ -9,16 +11,77 @@ import logging
 try:
     # ServiceClient is defined in the client.py file
     from tabpfn_client.client import ServiceClient
+    from tabpfn_client import set_access_token # Import the function to set token
 except ImportError as e:
     # If ServiceClient cannot be imported 
-    logging.exception(f"Failed to import ServiceClient from tabpfn_client.client: {e}")
-    raise ImportError(f"Could not import ServiceClient class from tabpfn_client.client. Error: {e}") from e
+    logging.exception(f"Failed to import from tabpfn_client: {e}")
+    raise ImportError(f"Could not import ServiceClient or set_access_token from tabpfn_client. Error: {e}") from e
 
 # Note: Specific exceptions like UsageLimitReached, ConnectionError were not found during import attempts.
 # We will rely on catching generic Exception and inspecting the message below.
 
 log = logging.getLogger(__name__)
 
+# --- Custom Exception ---
+
+class TabPFNInterfaceError(Exception):
+    """Custom exception for errors originating from the TabPFN interface layer."""
+    pass
+
+# --- Fit Function ---
+
+def fit_model(
+    tabpfn_token: str,
+    features: List[List[Any]],
+    target: List[Any],
+    config: Dict[str, Any]
+) -> str:
+    """Calls the TabPFN client to fit a model on the provided data.
+
+    Args:
+        tabpfn_token: The user's valid TabPFN API token.
+        features: A list of lists representing the feature data (X).
+        target: A list representing the target variable (y).
+        config: A dictionary of additional configuration options for ServiceClient.fit.
+
+    Returns:
+        The train_set_uid returned by the TabPFN client upon successful fitting.
+
+    Raises:
+        TabPFNInterfaceError: If data conversion fails or the TabPFN client raises an exception.
+    """
+    log.info(f"Attempting to fit model via TabPFN client. Feature shape: ({len(features)}, {len(features[0]) if features else 0}), Target length: {len(target)}")
+
+    # 1. Convert input data to NumPy arrays
+    try:
+        X = np.array(features)
+        y = np.array(target)
+        log.debug(f"Successfully converted input lists to NumPy arrays. X shape: {X.shape}, y shape: {y.shape}")
+    except ValueError as e:
+        log.error(f"Failed to convert input lists to NumPy arrays: {e}", exc_info=True)
+        raise TabPFNInterfaceError(f"Invalid data format for features or target: {e}") from e
+    except Exception as e: # Catch any other unexpected conversion errors
+        log.error(f"Unexpected error during NumPy conversion: {e}", exc_info=True)
+        raise TabPFNInterfaceError(f"Unexpected error converting data: {e}") from e
+
+    # 2. Set token and call ServiceClient.fit (classmethod)
+    try:
+        # Set the token globally for the client library before the call
+        set_access_token(tabpfn_token)
+        log.debug("Access token set via tabpfn_client.set_access_token.")
+
+        # Call fit as a classmethod, passing only data and config
+        train_set_uid = ServiceClient.fit(X, y, **config)
+        log.info(f"TabPFN client fit successful. train_set_uid: {train_set_uid}")
+        if not isinstance(train_set_uid, str) or not train_set_uid:
+             log.error(f"TabPFN client returned an invalid train_set_uid: {train_set_uid} (Type: {type(train_set_uid)}) ")
+             raise TabPFNInterfaceError("TabPFN client returned an invalid or empty train_set_uid.")
+        return train_set_uid
+    except Exception as e:
+        # Catch generic exceptions from the client (set_access_token or fit)
+        log.exception(f"TabPFN client interaction failed: {e}")
+        # Provide a more generic error message upwards
+        raise TabPFNInterfaceError(f"Error during TabPFN operation: {e}") from e
 
 def verify_tabpfn_token(token: str) -> bool:
     """Verifies if a TabPFN token is valid by attempting to fetch API usage.
