@@ -30,14 +30,14 @@
     *   Function `setup_user(tabpfn_token: str) -> str`: Verifies token using interface, generates a unique API key (e.g., JWT or random string), hashes the API key, encrypts the TabPFN token, stores the mapping in the database, returns the *raw* API key.
 *   [x] Implement API Endpoint (`tabpfn_api/api/auth.py`):
     *   `POST /auth/setup`: Takes `tabpfn_token` in request body, calls `auth_service.setup_user`, returns the generated API key. Use Pydantic for request body validation.
-*   [ ] Implement Authentication Middleware/Dependency (`tabpfn_api/core/security.py`):
+*   [x] Implement Authentication Middleware/Dependency (`tabpfn_api/core/security.py`):
     *   Create a FastAPI dependency (`get_current_user_token`) that:
         *   Extracts the bearer token (our API key) from the `Authorization` header.
         *   Looks up the hashed API key in the database.
         *   If found, retrieves and decrypts the associated TabPFN token.
         *   Returns the TabPFN token.
         *   Raises `HTTPException` (401 Unauthorized) if token is missing, invalid, or not found.
-*   [ ] Add basic integration tests for the `/auth/setup` endpoint and the authentication dependency.
+*   [x] Add basic integration tests for the `/auth/setup` endpoint and the authentication dependency.
 
 ---
 
