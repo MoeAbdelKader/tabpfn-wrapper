@@ -22,6 +22,18 @@ from tabpfn_api.db.database import init_db
 # Import settings and the auth router
 from tabpfn_api.core.config import settings
 from tabpfn_api.api import auth as auth_router
+# TODO: Add model router import here when created
+
+# --- TEMPORARY: Import and include test router for testing auth dependency ---
+# REMOVED - This is now handled in tests/conftest.py
+# try:
+#     from tests.test_api_auth import test_router as auth_test_router
+#     app.include_router(auth_test_router, prefix="/test_auth", tags=["Test Auth"])
+#     log.info("Included temporary auth test router.")
+# except ImportError:
+#     log.info("Auth test router not found, skipping.")
+#     pass
+# --- END TEMPORARY ---
 
 @app.get("/", tags=["General"], status_code=status.HTTP_200_OK)
 async def read_root():
@@ -50,7 +62,9 @@ app.include_router(auth_router.router, prefix=f"{settings.API_V1_STR}/auth", tag
 @app.on_event("startup")
 async def startup_event():
     log.info("Running startup event...")
-    init_db() # Initialize the database
+    # Import init_db here to avoid circular imports if models load db
+    from tabpfn_api.db.database import init_db
+    await init_db() # Await the async init_db
     log.info("Startup event finished.")
 
 # Placeholder for cleanup on shutdown (if needed)

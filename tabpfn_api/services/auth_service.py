@@ -1,5 +1,6 @@
 import logging
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tabpfn_api.models.user import User
 from tabpfn_api.core.security import (
@@ -22,11 +23,11 @@ class InvalidTabPFNTokenError(AuthServiceError):
     pass
 
 
-def setup_user(db: Session, tabpfn_token: str) -> str:
+async def setup_user(db: AsyncSession, tabpfn_token: str) -> str:
     """Sets up a new user by verifying their TabPFN token and generating a service API key.
 
     Args:
-        db: The database session.
+        db: The async database session.
         tabpfn_token: The user's TabPFN token.
 
     Returns:
@@ -65,8 +66,8 @@ def setup_user(db: Session, tabpfn_token: str) -> str:
             encrypted_tabpfn_token=encrypted_token
         )
         db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
+        await db.commit()
+        await db.refresh(db_user)
         log.info(f"Successfully created and stored new user record with ID: {db_user.id}")
 
         # 6. Return the plain text service API key
@@ -74,5 +75,5 @@ def setup_user(db: Session, tabpfn_token: str) -> str:
 
     except Exception as e:
         log.exception(f"An error occurred during user setup: {e}")
-        db.rollback() # Ensure transaction is rolled back on error
+        await db.rollback() # Ensure transaction is rolled back on error
         raise AuthServiceError("An internal error occurred during user setup.") from e 

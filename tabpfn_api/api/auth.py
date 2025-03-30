@@ -1,6 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tabpfn_api.db.database import get_db
 from tabpfn_api.schemas.auth import UserSetupRequest, UserSetupResponse
@@ -24,13 +25,13 @@ router = APIRouter()
                 "for subsequent requests to protected endpoints.",
     tags=["Authentication"]
 )
-def register_user(
+async def register_user(
     request_body: UserSetupRequest,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Registers a user by validating their TabPFN token and generating a service API key."""
     try:
-        api_key = setup_user(db=db, tabpfn_token=request_body.tabpfn_token)
+        api_key = await setup_user(db=db, tabpfn_token=request_body.tabpfn_token)
         log.info(f"Successfully registered user.")
         return UserSetupResponse(api_key=api_key)
     except InvalidTabPFNTokenError as e:
