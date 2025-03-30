@@ -3,8 +3,15 @@ from cryptography.fernet import Fernet, InvalidToken
 from passlib.context import CryptContext
 import secrets
 import logging
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from tabpfn_api.core.config import settings
+from tabpfn_api.db.database import get_db
+from tabpfn_api.models.user import User
 
 # --- API Key Hashing (using Passlib) ---
 
@@ -66,4 +73,77 @@ def decrypt_token(encrypted_token: bytes) -> str:
     except InvalidToken:
         # Re-raise or handle appropriately (e.g., log and return None or raise specific app error)
         # Re-raising for now indicates a serious issue with stored data or key mismatch.
-        raise InvalidToken("Could not decrypt token. Key mismatch or data corruption.") 
+        raise InvalidToken("Could not decrypt token. Key mismatch or data corruption.")
+
+log = logging.getLogger(__name__)
+
+# Define the bearer scheme
+bearer_scheme = HTTPBearer(
+    scheme_name="Bearer",
+    description="Your service-specific API key issued via /auth/setup."
+)
+
+async def get_current_user_token(
+    token: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> str:
+    """FastAPI dependency to authenticate requests and return the decrypted TabPFN token.
+
+    Retrieves the Bearer token, finds the corresponding user by comparing hashes,
+    decrypts and returns the stored TabPFN token.
+
+    Raises:
+        HTTPException(401): If the token is invalid, missing, or the user is not found.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    plain_api_key = token.credentials
+    log.debug(f"Attempting to authenticate user with provided API key.")
+
+    try:
+        # Fetch all users asynchronously
+        stmt = select(User)
+        result = await db.execute(stmt)
+        users = result.scalars().all()
+
+        matched_user = None
+        for user in users:
+            # verify_api_key is CPU-bound (sync), no await needed here
+            if verify_api_key(plain_api_key, user.hashed_api_key):
+                matched_user = user
+                break
+
+        if matched_user is None:
+            log.warning(f"Authentication failed: No user found for the provided API key.")
+            raise credentials_exception
+
+        log.debug(f"Found matching user ID: {matched_user.id}")
+
+        # Decrypt the stored TabPFN token (sync)
+        decrypted_tabpfn_token = decrypt_token(matched_user.encrypted_tabpfn_token)
+        log.info(f"Successfully authenticated user ID: {matched_user.id}")
+        return decrypted_tabpfn_token
+
+    except InvalidToken:
+        # This occurs if the SECRET_KEY changed or the data is corrupt
+        log.error(
+            f"Could not decrypt TabPFN token for user ID: {getattr(matched_user, 'id', 'N/A')}. "
+            "Possible SECRET_KEY mismatch or data corruption.",
+            exc_info=True
+        )
+        # Let the credentials_exception (401) be raised
+        raise credentials_exception
+    except HTTPException as http_exc:
+        # Re-raise known HTTP exceptions (like our credentials_exception)
+        raise http_exc
+    except Exception as e:
+        # Catch *other* unexpected database or logic errors during lookup/decryption
+        log.exception(f"Unexpected error during token validation for key ending: ...{plain_api_key[-4:]}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during authentication."
+        ) from e 
