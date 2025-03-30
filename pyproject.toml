@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tabpfn-api-wrapper"
+version = "0.1.0"
+description = "An API wrapper for the PriorLabs TabPFN client."
+readme = "README.md" # Optional, assumes you might add one later
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License", # Choose your license
+    "Operating System :: OS Independent",
+]
+# Add dependencies here if they are core to the library itself
+# For now, keep them in requirements.txt for the application
+# dependencies = [
+#     "fastapi", 
+#     # ... other core deps
+# ]
+
+[tool.setuptools.packages.find]
+where = ["."]  # Look for packages in the current directory
+include = ["tabpfn_api*"]  # Include the tabpfn_api package
+exclude = ["tests*"] # Exclude tests from the package itself 
