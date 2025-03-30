@@ -44,6 +44,32 @@ This document provides guidance for developers maintaining the TabPFN API Wrappe
 *   Subsequent requests use `Authorization: Bearer <our_api_key>`.
 *   A FastAPI dependency verifies the bearer token against the stored hashes and retrieves/decrypts the associated TabPFN token for use.
 
+## Interacting with `tabpfn-client` Library
+
+This section details key findings and patterns for using the external `tabpfn-client` library.
+
+### Authentication for API Calls
+
+*   **Singleton Client:** The core `ServiceClient` (in `tabpfn_client.client`) is implemented as a Singleton. Methods like `fit`, `predict`, `get_api_usage` are `@classmethod`s.
+*   **Setting the Token:** Authentication is managed globally for the singleton instance. Before making calls that require authentication (like `fit` or `predict`), the user's access token must be set using the standalone function `tabpfn_client.set_access_token(token)`. This function updates the default headers used by the `ServiceClient`'s internal `httpx` client.
+*   **Calling Methods:** Once the token is set via `set_access_token`, classmethods like `ServiceClient.fit(...)` can be called directly. They will implicitly use the token set on the shared client instance.
+*   **Token Verification:** The `ServiceClient.get_api_usage(access_token=...)` method *does* accept the token directly as an argument and can be used for verifying a token without setting it globally.
+*   **Concurrency Note:** Using a globally set token for a singleton client in a concurrent server environment (like FastAPI) *could* potentially lead to race conditions if not handled carefully internally by the `tabpfn-client` library (e.g., using thread-local storage). This hasn't been explicitly verified and should be monitored.
+
+### Method-Specific Arguments (`fit`)
+
+*   **`ServiceClient.fit(X, y, config=None)`:**
+    *   Does **not** accept an `access_token` argument directly.
+    *   The `config` dictionary is optional according to docs, but internal code seems to require the `paper_version` key.
+    *   Our wrapper (`fit_model` in `tabpfn_interface/client.py`) ensures `config` passed to `ServiceClient.fit` always contains `paper_version` (defaulting to `False`) and filters out any other keys not explicitly mentioned in the `fit` documentation (like prediction parameters).
+
+### Error Handling
+
+*   The library does not seem to export specific exception classes for common errors (e.g., `AuthenticationError`, `UsageLimitError`).
+*   Our interface layer (`tabpfn_interface/client.py`) catches generic `Exception` during client interactions.
+*   For `verify_tabpfn_token`, we inspect the exception message string to heuristically determine the cause (invalid token, usage limit, connection error).
+*   For `fit_model`, we catch generic exceptions and wrap them in `TabPFNInterfaceError`, passing the original error message up.
+
 ## Running Locally
 
 1.  Ensure Docker and Docker Compose are installed.
@@ -89,19 +115,16 @@ The primary goal of Milestone 2 was to implement user registration and API key g
 3.  **Service Layer (`services/auth_service.py`):** The endpoint calls `setup_user`.
 4.  **Token Verification (`tabpfn_interface/client.py`):**
     *   `setup_user` first calls `verify_tabpfn_token`.
-    *   `verify_tabpfn_token` uses the `tabpfn_client` library (`from tabpfn_client.client import ServiceClient`) to make a real API call (`ServiceClient.get_api_usage(access_token=token)`) to the external TabPFN service.
-    *   **Error Handling Note:** The `tabpfn-client` library (as of v0.1.7) does not seem to expose specific exceptions like `UsageLimitReached` or `ConnectionError` for direct import. Therefore, `verify_tabpfn_token` catches the generic `Exception` and inspects the error message content (using keywords like "usage limit", "connection error", "authentication failed") to determine if the token is valid, if a usage limit was hit (still considered valid for verification), or if a connection/authentication error occurred.
-    *   It returns `True` if the `get_api_usage` call succeeds OR if a usage limit error is detected. It returns `False` for authentication errors, connection errors, or other unexpected exceptions.
+    *   `verify_tabpfn_token` uses `ServiceClient.get_api_usage(access_token=token)` (see *Interacting with `tabpfn-client` Library* section above for details on error handling).
+    *   It returns `True` if the call succeeds or a usage limit error is detected.
 5.  **Key Generation & Storage (`services/auth_service.py` & `core/security.py`):**
-    *   If `verify_tabpfn_token` returns `True`, `setup_user` proceeds.
-    *   It generates a unique, secure API key for *our* service using `secrets.token_urlsafe()` (`security.generate_api_key`).
-    *   It hashes this service key using `passlib` (bcrypt) (`security.get_api_key_hash`).
-    *   It encrypts the user's original TabPFN token using `cryptography.fernet` (`security.encrypt_token`). The Fernet key is derived from the `SECRET_KEY` environment variable (see `core/config.py`).
-    *   It creates a new `User` record (defined in `models/user.py`) containing the `hashed_api_key` and `encrypted_tabpfn_token`.
-    *   It saves this record to the PostgreSQL database.
+    *   If verification is successful, `setup_user` proceeds.
+    *   It generates a unique service API key (`security.generate_api_key`).
+    *   It hashes this service key (`security.get_api_key_hash`).
+    *   It encrypts the user's original TabPFN token (`security.encrypt_token`).
+    *   It creates and saves a `User` record.
 6.  **Response (`services/auth_service.py` -> `api/auth.py`):**
-    *   `setup_user` returns the *plain text* generated service API key.
-    *   The API endpoint wraps this in the `UserSetupResponse` schema and returns a `201 Created` status.
+    *   Returns the plain text service API key.
 
 ## Debugging `tabpfn-client` Import Issues (Historical)
 

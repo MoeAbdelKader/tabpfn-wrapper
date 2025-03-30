@@ -70,8 +70,23 @@ def fit_model(
         set_access_token(tabpfn_token)
         log.debug("Access token set via tabpfn_client.set_access_token.")
 
-        # Call fit as a classmethod, passing only data and config
-        train_set_uid = ServiceClient.fit(X, y, **config)
+        # Prepare the config for ServiceClient.fit
+        fit_config = {}
+        if config is not None:
+            # Copy known keys if they exist
+            if "tabpfn_systems" in config:
+                 fit_config["tabpfn_systems"] = config["tabpfn_systems"]
+            # Ensure paper_version is always present, defaulting to False
+            fit_config["paper_version"] = config.get("paper_version", False)
+        else:
+            # Default if no config is provided at all
+            fit_config["paper_version"] = False
+            # Let the underlying library handle the default for tabpfn_systems if not specified
+
+        log.debug(f"Using config for ServiceClient.fit: {fit_config}")
+
+        # Call fit as a classmethod, passing only data and the prepared config
+        train_set_uid = ServiceClient.fit(X, y, config=fit_config)
         log.info(f"TabPFN client fit successful. train_set_uid: {train_set_uid}")
         if not isinstance(train_set_uid, str) or not train_set_uid:
              log.error(f"TabPFN client returned an invalid train_set_uid: {train_set_uid} (Type: {type(train_set_uid)}) ")
