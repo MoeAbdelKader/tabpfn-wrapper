@@ -129,7 +129,7 @@ We will use a standard 3-layer architecture within the FastAPI application, pack
         *   Configure the service (Cloud Run, App Runner) to pull and run the image.
         *   Handles scaling (even to zero), HTTPS termination, and basic infrastructure management.
         *   **Pro:** Simplest operational overhead, pay-for-use. **Con:** Platform limits (check if suitable for TabPFN's potential resource needs), less control than VM.
-*   **Recommendation:** Start with **Google Cloud Run** if comfortable with cloud services, as it balances simplicity and power. Otherwise, a **Single VM** with Docker Compose is a very solid and understandable starting point.
+*   **Chosen Strategy:** We will use **Google Cloud Run** for the initial deployment, coupled with Google Cloud SQL for PostgreSQL and Google Artifact Registry, leveraging managed services for simplicity and reliability.
 
 ## 5. Configuration Management
 

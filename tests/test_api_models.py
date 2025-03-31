@@ -1,6 +1,7 @@
 import pytest
 import uuid
 from unittest.mock import patch, AsyncMock
+from datetime import datetime
 
 from httpx import AsyncClient
 from fastapi import status
@@ -419,4 +420,104 @@ async def test_predict_model_invalid_output_type(
     # --- Assertions ---
     # FastAPI/Pydantic validation should catch this
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    assert "Invalid output_type for regression" in response.text 
+    assert "Invalid output_type for regression" in response.text
+
+# --- Tests for GET /models/available ---
+
+@pytest.mark.asyncio
+async def test_get_available_models(test_client: AsyncClient):
+    """Test successfully retrieving the list of available base models."""
+    response = await test_client.get(f"{API_V1_STR}/models/available")
+
+    assert response.status_code == status.HTTP_200_OK
+    response_data = response.json()
+
+    assert "available_models" in response_data
+    models_dict = response_data["available_models"]
+    assert isinstance(models_dict, dict)
+
+    assert "classification" in models_dict
+    assert isinstance(models_dict["classification"], list)
+    assert all(isinstance(item, str) for item in models_dict["classification"])
+    # Check if 'default' is present as a basic sanity check
+    assert "default" in models_dict["classification"]
+
+    assert "regression" in models_dict
+    assert isinstance(models_dict["regression"], list)
+    assert all(isinstance(item, str) for item in models_dict["regression"])
+    assert "default" in models_dict["regression"]
+
+
+# --- Tests for GET /models (User's models) --- 
+
+@pytest.mark.asyncio
+async def test_list_user_models_unauthenticated(test_client: AsyncClient):
+    """Test listing user models without authentication fails."""
+    # Remember to add trailing slash for the list endpoint
+    response = await test_client.get(f"{MODELS_ENDPOINT}/")
+    # Expect 403 Forbidden when Authorization header is missing
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert "Not authenticated" in response.text
+
+@pytest.mark.asyncio
+async def test_list_user_models_empty(test_client: AsyncClient, authenticated_user_token: str):
+    """Test listing user models when none have been trained yet."""
+    response = await test_client.get(
+        f"{MODELS_ENDPOINT}/",
+        headers={"Authorization": f"Bearer {authenticated_user_token}"}
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    response_data = response.json()
+    assert "models" in response_data
+    assert response_data["models"] == []
+
+@pytest.mark.asyncio
+async def test_list_user_models_success(
+    test_client: AsyncClient,
+    db_session: AsyncSession,
+    authenticated_user_token: str,
+    valid_fit_payload: dict
+):
+    """Test listing user models after one has been successfully trained."""
+    # --- Setup: Fit a model first ---
+    mock_train_set_uid = "mock_tabpfn_uid_list_test_789"
+    internal_model_id = None
+    with patch("tabpfn_api.services.model_service.fit_model", return_value=mock_train_set_uid):
+        fit_response = await test_client.post(
+            f"{MODELS_ENDPOINT}/fit",
+            json=valid_fit_payload,
+            headers={"Authorization": f"Bearer {authenticated_user_token}"}
+        )
+        assert fit_response.status_code == status.HTTP_201_CREATED
+        internal_model_id = fit_response.json()["internal_model_id"]
+        assert internal_model_id is not None
+
+    # --- Test: List the models ---
+    response = await test_client.get(
+        f"{MODELS_ENDPOINT}/",
+        headers={"Authorization": f"Bearer {authenticated_user_token}"}
+    )
+
+    # --- Assertions ---
+    assert response.status_code == status.HTTP_200_OK
+    response_data = response.json()
+    assert "models" in response_data
+    assert isinstance(response_data["models"], list)
+    assert len(response_data["models"]) == 1
+
+    # Validate the structure of the returned model metadata
+    model_meta = response_data["models"][0]
+    assert model_meta["internal_model_id"] == internal_model_id
+    assert "created_at" in model_meta # Check presence and rough format
+    assert isinstance(model_meta["created_at"], str)
+    assert model_meta["feature_count"] == len(valid_fit_payload["features"][0])
+    assert model_meta["sample_count"] == len(valid_fit_payload["features"])
+    assert model_meta["feature_names"] == valid_fit_payload["feature_names"]
+    assert model_meta["tabpfn_config"] == valid_fit_payload["config"]
+
+    # Check timestamp format briefly (adjust if needed based on actual output)
+    try:
+        datetime.fromisoformat(model_meta["created_at"].replace('Z', '+00:00'))
+    except ValueError:
+        pytest.fail(f"created_at timestamp format is invalid: {model_meta['created_at']}") 
