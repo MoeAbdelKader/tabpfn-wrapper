@@ -47,10 +47,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             const ul = document.createElement('ul');
             models.forEach(model => {
                 const li = document.createElement('li');
-                // Display relevant info - adapt based on actual API response structure
-                // Assuming the response is a list of objects like: 
-                // { internal_model_id: "...", train_set_uid: "...", created_at: "...", metadata: {...} }
-                li.textContent = `Model ID: ${model.internal_model_id} (Created: ${new Date(model.created_at).toLocaleString()})`;
+                // Format date more precisely with time
+                const createdDate = new Date(model.created_at);
+                const formattedDate = `${createdDate.toLocaleDateString()} ${createdDate.toLocaleTimeString()}`;
+                
+                // Display relevant info
+                li.textContent = `Model ID: ${model.internal_model_id} (Created: ${formattedDate})`;
                 // Add delete button later if needed
                 ul.appendChild(li);
             });

@@ -112,10 +112,37 @@ document.addEventListener('DOMContentLoaded', async () => {
             models.forEach(model => {
                 const option = document.createElement('option');
                 option.value = model.internal_model_id;
-                // Include more details if helpful
-                option.textContent = `ID: ${model.internal_model_id} (Created: ${new Date(model.created_at).toLocaleDateString()})`;
+                
+                // Format date more precisely with time
+                const createdDate = new Date(model.created_at);
+                const formattedDate = `${createdDate.toLocaleDateString()} ${createdDate.toLocaleTimeString()}`;
+                
+                // Include more details and format
+                option.textContent = `ID: ${model.internal_model_id} (Created: ${formattedDate})`;
+                
                 // Store task type if available in metadata (assuming classification for now)
                 option.dataset.task = model.metadata?.task_type || 'classification'; 
+                modelSelect.appendChild(option);
+            });
+            
+            // Sort models by creation time (newest first) and mark the newest one
+            const sortedOptions = [...modelSelect.options].filter(opt => opt.value !== "")
+                .sort((a, b) => {
+                    const dateA = new Date(models.find(m => m.internal_model_id === a.value)?.created_at || 0);
+                    const dateB = new Date(models.find(m => m.internal_model_id === b.value)?.created_at || 0);
+                    return dateB - dateA; // Newest first
+                });
+            
+            // Clear and re-add the default option
+            modelSelect.innerHTML = '';
+            modelSelect.appendChild(defaultOption);
+            
+            // Add sorted options back
+            sortedOptions.forEach((option, index) => {
+                if (index === 0) {
+                    // Mark the newest model
+                    option.textContent += " (Newest)";
+                }
                 modelSelect.appendChild(option);
             });
         } else {
@@ -183,13 +210,40 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Format prediction based on type
             if (outputType === 'probabilities' && Array.isArray(predictions[index])) {
                 // For probabilities, show formatted percentages
-                const probs = predictions[index]
-                    .map((p, i) => `Class ${i}: ${(p * 100).toFixed(2)}%`)
-                    .join('<br>');
-                predCell.innerHTML = probs;
+                if (predictions[index].length === 2) {
+                    // Binary classification - show class 0/1 probabilities
+                    const probs = [
+                        `Class 0: ${(predictions[index][0] * 100).toFixed(1)}%`,
+                        `Class 1: ${(predictions[index][1] * 100).toFixed(1)}%`
+                    ];
+                    
+                    // Bold the class with highest probability
+                    const highestClass = predictions[index][0] > predictions[index][1] ? 0 : 1;
+                    probs[highestClass] = `<strong>${probs[highestClass]}</strong> (Predicted)`;
+                    
+                    predCell.innerHTML = probs.join('<br>');
+                } else {
+                    // Multi-class - show all class probabilities
+                    const probs = predictions[index]
+                        .map((p, i) => `Class ${i}: ${(p * 100).toFixed(1)}%`)
+                        .join('<br>');
+                    predCell.innerHTML = probs;
+                }
+                
+                // Add visual indicator of which class is predicted
+                predCell.style.borderLeft = '3px solid var(--accent)';
             } else {
-                // For standard predictions, show the value
-                predCell.textContent = JSON.stringify(predictions[index]);
+                // For standard predictions (should be 0 or 1 for classification), show the value
+                let predValue = predictions[index];
+                
+                // If it's still an array but we're in "predictions" mode,
+                // take the index of the max value as the predicted class
+                if (Array.isArray(predValue)) {
+                    const maxIndex = predValue.indexOf(Math.max(...predValue));
+                    predValue = `Class ${maxIndex}`;
+                }
+                
+                predCell.textContent = predValue;
             }
             
             tr.appendChild(predCell);
