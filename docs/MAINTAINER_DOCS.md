@@ -33,6 +33,7 @@ This document provides guidance for developers maintaining the TabPFN API Wrappe
     *   Generate migrations: `alembic revision --autogenerate -m "Description of changes"`
     *   Apply migrations: `alembic upgrade head`
     *   Alembic configuration is in `alembic.ini`.
+*   **UUID Handling:** When querying tables using UUID columns (like `ModelMetadata.internal_model_id`) based on string inputs (e.g., from API path parameters), ensure the string is converted to a `uuid.UUID` object in the service layer before using it in the SQLAlchemy query condition (`where(ModelMetadata.internal_model_id == model_uuid)`).
 
 ### Authentication Flow (API Keys)
 
@@ -52,16 +53,22 @@ This section details key findings and patterns for using the external `tabpfn-cl
 
 *   **Singleton Client:** The core `ServiceClient` (in `tabpfn_client.client`) is implemented as a Singleton. Methods like `fit`, `predict`, `get_api_usage` are `@classmethod`s.
 *   **Setting the Token:** Authentication is managed globally for the singleton instance. Before making calls that require authentication (like `fit` or `predict`), the user's access token must be set using the standalone function `tabpfn_client.set_access_token(token)`. This function updates the default headers used by the `ServiceClient`'s internal `httpx` client.
-*   **Calling Methods:** Once the token is set via `set_access_token`, classmethods like `ServiceClient.fit(...)` can be called directly. They will implicitly use the token set on the shared client instance.
+*   **Calling Methods:** Once the token is set via `set_access_token`, classmethods like `ServiceClient.fit(...)` or `ServiceClient.predict(...)` can be called directly. They will implicitly use the token set on the shared client instance.
 *   **Token Verification:** The `ServiceClient.get_api_usage(access_token=...)` method *does* accept the token directly as an argument and can be used for verifying a token without setting it globally.
 *   **Concurrency Note:** Using a globally set token for a singleton client in a concurrent server environment (like FastAPI) *could* potentially lead to race conditions if not handled carefully internally by the `tabpfn-client` library (e.g., using thread-local storage). This hasn't been explicitly verified and should be monitored.
 
-### Method-Specific Arguments (`fit`)
+### Method-Specific Arguments (`fit` and `predict`)
 
 *   **`ServiceClient.fit(X, y, config=None)`:**
     *   Does **not** accept an `access_token` argument directly.
-    *   The `config` dictionary is optional according to docs, but internal code seems to require the `paper_version` key.
-    *   Our wrapper (`fit_model` in `tabpfn_interface/client.py`) ensures `config` passed to `ServiceClient.fit` always contains `paper_version` (defaulting to `False`) and filters out any other keys not explicitly mentioned in the `fit` documentation (like prediction parameters).
+    *   The `config` dictionary is internally used for `tabpfn_systems` and `paper_version`.
+    *   **`paper_version` Requirement:** The client library internally expects the `paper_version` key to exist within the `config` dictionary passed to `fit`. Our wrapper (`fit_model` in `tabpfn_interface/client.py`) ensures `config` always contains `paper_version` (defaulting to `False`) before calling the client.
+*   **`ServiceClient.predict(train_set_uid, x_test, task, predict_params=None, tabpfn_config=None)`:**
+    *   Does **not** accept an `access_token` argument directly.
+    *   Prediction-specific parameters (like `output_type` for regression) **must** be passed within the `predict_params` dictionary.
+    *   General TabPFN configuration parameters (like `device`) **must** be passed within the `tabpfn_config` dictionary.
+    *   **`paper_version` Requirement:** Similar to `fit`, the client library internally expects the `paper_version` key to be present in the `tabpfn_config` dictionary (it tries to `pop` it). Our wrapper (`predict_model` in `tabpfn_interface/client.py`) ensures this key exists (defaulting to `False`) before calling the client.
+    *   Our API wrapper abstracts this by accepting a single `config` dictionary from the user for both `fit` and `predict`. The interface layer (`tabpfn_interface/client.py`) is responsible for correctly structuring the `config`, `predict_params`, and `tabpfn_config` arguments when calling the underlying `ServiceClient` methods.
 
 ### Error Handling
 

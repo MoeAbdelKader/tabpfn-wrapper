@@ -71,27 +71,27 @@
 ### Milestone 4: Core Modeling - `predict` Endpoint
 
 *   **Goal:** Allow authenticated users to get predictions using a previously trained model.
-*   [ ] Implement TabPFN Interface Function (`tabpfn_api/tabpfn_interface/client.py`):
+*   [x] Implement TabPFN Interface Function (`tabpfn_api/tabpfn_interface/client.py`):
     *   Function `predict_model(tabpfn_token: str, train_set_uid: str, features: list, task: str, output_type: str, config: dict) -> list`:
         *   Converts input lists/dicts to NumPy arrays.
         *   Calls `ServiceClient.predict(train_set_uid, x_test, task=task, output_type=output_type, **config)` using the provided `tabpfn_token`.
         *   Converts the NumPy result back to standard Python lists.
         *   Returns the predictions/probabilities.
         *   Handles data conversion errors and `tabpfn-client` exceptions.
-*   [ ] Implement Model Service Logic (`tabpfn_api/services/model_service.py`):
+*   [x] Implement Model Service Logic (`tabpfn_api/services/model_service.py`):
     *   Function `get_predictions(user_tabpfn_token: str, internal_model_id: str, features: list, task: str, output_type: str, config: dict) -> list`:
         *   Look up the `ModelMetadata` in the database using `internal_model_id`.
         *   Verify the requesting user owns this model (check `user_id`). Raise `HTTPException` (403 Forbidden) if not owner.
         *   Retrieve the `train_set_uid`.
         *   Call `tabpfn_interface.predict_model` with the user's token, `train_set_uid`, and other parameters.
         *   Return the results.
-*   [ ] Implement API Endpoint (`tabpfn_api/api/models.py`):
+*   [x] Implement API Endpoint (`tabpfn_api/api/models.py`):
     *   `POST /models/{model_id}/predict`: (Use `model_id` as path parameter).
         *   Requires authentication.
         *   Takes features, task, output_type, and optional config in request body (define Pydantic model).
         *   Calls `model_service.get_predictions` with the authenticated user's TabPFN token and `model_id`.
         *   Returns the predictions.
-*   [ ] Add integration tests for the `/models/{model_id}/predict` endpoint, checking authentication, ownership, and data processing.
+*   [x] Add integration tests for the `/models/{model_id}/predict` endpoint, checking authentication, ownership, and data processing.
 
 ---
 
