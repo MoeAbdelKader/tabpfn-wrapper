@@ -44,6 +44,10 @@ RUN groupadd -r appuser && useradd --no-log-init -r -g appuser appuser
 # Copy the virtual environment from the builder stage
 COPY --from=builder /opt/venv /opt/venv
 
+# Create directory for tabpfn_client cache and ensure correct permissions
+RUN mkdir -p /opt/venv/lib/python3.11/site-packages/tabpfn_client/.tabpfn && \
+    chown -R appuser:appuser /opt/venv/lib/python3.11/site-packages/tabpfn_client
+
 # Copy only the necessary application code from the current directory
 # Use --chown to set the owner to the non-root user
 COPY --chown=appuser:appuser tabpfn_api ./tabpfn_api

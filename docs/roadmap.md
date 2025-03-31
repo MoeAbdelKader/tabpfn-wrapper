@@ -152,13 +152,16 @@
 ### Milestone 7: CSV Upload API
 
 *   **Goal:** Allow training and prediction via CSV file uploads through the API.
-*   [ ] Add `pandas` dependency.
-*   [ ] Define `POST /api/v1/models/fit/upload` endpoint (with `target_column` parameter).
-*   [ ] Implement `train_model_from_csv` service function (parsing, error handling, calling `tabpfn_interface.fit_model`).
-*   [ ] Define `POST /api/v1/models/{model_id}/predict/upload` endpoint.
-*   [ ] Implement `get_predictions_from_csv` service function (parsing, error handling, calling `tabpfn_interface.predict_model`).
-*   [ ] Add integration tests for CSV upload endpoints.
-*   [ ] Update OpenAPI documentation for new endpoints.
+*   [x] Add `pandas` dependency.
+*   [x] Define `POST /api/v1/models/fit/upload` endpoint (with `target_column` parameter).
+*   [x] Implement `train_model_from_csv` service function (parsing, error handling, calling `tabpfn_interface.fit_model`).
+*   [x] Define `POST /api/v1/models/{model_id}/predict/upload` endpoint.
+*   [x] Implement `get_predictions_from_csv` service function (parsing, error handling, calling `tabpfn_interface.predict_model`).
+*   [x] Add integration tests for CSV upload endpoints.
+*   [x] Update OpenAPI documentation for new endpoints.
+*   [x] Deploy CSV upload feature to production.
+*   [x] Create automation scripts for testing deployed API.
+*   [x] Document deployment and testing procedures.
 
 ---
 

@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 
@@ -8,12 +8,14 @@ from tabpfn_api.models.user import User # Need User model for dependency typing
 from tabpfn_api.core.security import get_current_user # Use the updated dependency
 from tabpfn_api.schemas.model import (
     ModelFitRequest, ModelFitResponse, ModelPredictRequest, ModelPredictResponse,
-    AvailableModelsResponse, UserModelListResponse
+    AvailableModelsResponse, UserModelListResponse,
+    ModelCSVFitRequest, ModelCSVPredictRequest
 )
 from tabpfn_api.services.model_service import (
     train_new_model, get_predictions, list_available_models,
     list_user_models, # Added list_user_models
-    ModelServiceError, ModelServiceDownstreamUnavailableError
+    train_model_from_csv, get_predictions_from_csv,
+    ModelServiceError, ModelServiceDownstreamUnavailableError, CSVParsingError
 )
 
 log = logging.getLogger(__name__)
@@ -318,6 +320,228 @@ async def get_user_models_list(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected internal server error occurred.",
+        )
+
+# --- Responses for CSV Fit Upload Endpoint ---
+fit_upload_responses = {
+    status.HTTP_201_CREATED: {
+        "description": "CSV file successfully parsed, model trained, and metadata stored.",
+        "model": ModelFitResponse,
+    },
+    status.HTTP_400_BAD_REQUEST: {
+        "description": "Invalid Input: CSV parsing failed, target column not found, or TabPFN input requirements not met.",
+    },
+    status.HTTP_401_UNAUTHORIZED: {
+        "description": "Authentication Required: Invalid or missing API key.",
+    },
+    status.HTTP_503_SERVICE_UNAVAILABLE: {
+        "description": "Service Unavailable: Error during TabPFN client operation or internal decryption failure.",
+    },
+    status.HTTP_500_INTERNAL_SERVER_ERROR: {
+        "description": "Internal Server Error: Unexpected error during model training or metadata saving.",
+    },
+}
+
+@router.post(
+    "/fit/upload",
+    response_model=ModelFitResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Train (Fit) a New TabPFN Model from CSV Upload",
+    description=(
+        "Uploads a CSV file, parses it to extract feature data and target data (based on the specified `target_column`), "
+        "and trains a new TabPFN model using the PriorLabs service.\n\n"
+        "- Requires authentication via Bearer token (service API key).\n"
+        "- Requires a CSV file with a header row.\n"
+        "- The `target_column` parameter specifies which column to use as the target variable; all other columns are used as features.\n"
+        "- Returns a unique internal `internal_model_id` (UUID) for this service, which is needed for subsequent predictions."
+    ),
+    tags=["Models"],
+    responses=fit_upload_responses
+)
+async def fit_new_model_from_csv(
+    file: UploadFile = File(..., description="CSV file with header row containing feature and target data"),
+    target_column: str = Query(..., description="Name of the column to use as the target variable"),
+    config: dict = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Handles the request to train a new model from a CSV file upload."""
+    try:
+        log.info(f"Received CSV model fit request from user ID: {current_user.id}")
+        
+        # Check file size limit (optional, set as needed)
+        # file_size = await file.seek(0, 2)  # Go to end to get size
+        # await file.seek(0)  # Reset position
+        # if file_size > MAX_FILE_SIZE:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        #         detail=f"File too large. Maximum size is {MAX_FILE_SIZE} bytes."
+        #     )
+        
+        # Check file content type (optional, but recommended)
+        if not file.content_type in ["text/csv", "application/vnd.ms-excel", "application/csv"]:
+            log.warning(f"User {current_user.id} uploaded file with unexpected content type: {file.content_type}")
+            # Continue processing but log the warning - content type is often unreliable
+        
+        internal_model_id = await train_model_from_csv(
+            db=db,
+            current_user=current_user,
+            file=file,
+            target_column=target_column,
+            config=config
+        )
+        log.info(f"CSV model training successful for user ID: {current_user.id}. Internal ID: {internal_model_id}")
+        return ModelFitResponse(internal_model_id=internal_model_id)
+
+    except CSVParsingError as e:
+        log.error(f"CSV parsing error for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except ModelServiceDownstreamUnavailableError as e:
+        log.error(f"CSV model fit failed for user {current_user.id}: Downstream TabPFN service unavailable: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The TabPFN service is currently unavailable for model training. Please try again later.",
+        )
+    except ModelServiceError as e:
+        log.error(f"Model service error during CSV fit request for user {current_user.id}: {e}", exc_info=True)
+        if "decrypt" in str(e) or "save model metadata" in str(e):
+            detail = "An internal error occurred while processing your request."
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        else:
+            detail = f"Failed to train model: {e}"
+            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=detail,
+        )
+    except Exception as e:
+        log.exception(f"Unexpected error during CSV model fit request for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected internal error occurred.",
+        )
+
+# --- Responses for CSV Predict Upload Endpoint ---
+predict_upload_responses = {
+    status.HTTP_200_OK: {
+        "description": "CSV file successfully parsed and predictions generated.",
+        "model": ModelPredictResponse,
+    },
+    status.HTTP_400_BAD_REQUEST: {
+        "description": "Invalid Input: CSV parsing failed, invalid model ID format, or feature mismatch.",
+    },
+    status.HTTP_401_UNAUTHORIZED: {
+        "description": "Authentication Required: Invalid or missing API key.",
+    },
+    status.HTTP_403_FORBIDDEN: {
+        "description": "Access Denied: The authenticated user does not own the requested model.",
+    },
+    status.HTTP_404_NOT_FOUND: {
+        "description": "Model Not Found: The requested model ID does not exist.",
+    },
+    status.HTTP_503_SERVICE_UNAVAILABLE: {
+        "description": "Service Unavailable: Error during TabPFN client prediction operation or internal decryption failure.",
+    },
+    status.HTTP_500_INTERNAL_SERVER_ERROR: {
+        "description": "Internal Server Error: Unexpected error during prediction process.",
+    },
+}
+
+@router.post(
+    "/{model_id}/predict/upload",
+    response_model=ModelPredictResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate Predictions from a Trained Model Using CSV Upload",
+    description=(
+        "Uploads a CSV file containing feature data and uses a previously trained model (identified by `model_id`) "
+        "to generate predictions.\n\n"
+        "- Requires authentication via Bearer token (service API key).\n"
+        "- Requires a CSV file with a header row. The file should contain only feature columns (no target column).\n"
+        "- Verifies that the model exists and belongs to the authenticated user.\n"
+        "- Validates that the number of columns in the CSV matches the number of features used during training.\n"
+        "- Returns the predictions in the format specified by `task` and `output_type`."
+    ),
+    tags=["Models"],
+    responses=predict_upload_responses
+)
+async def predict_with_model_from_csv(
+    model_id: str,
+    file: UploadFile = File(..., description="CSV file with header row containing feature data for prediction"),
+    task: str = Query(..., description="Task type: 'classification' or 'regression'. Must match the task the model was trained for."),
+    output_type: str = Query("mean", description="Specifies output format for regression tasks."),
+    config: dict = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Handles the request to get predictions from a trained model using a CSV file upload."""
+    try:
+        log.info(f"Received CSV prediction request from user ID: {current_user.id} for model: {model_id}")
+        
+        # Validate model_id is a valid UUID
+        try:
+            uuid.UUID(model_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid model ID format"
+            )
+        
+        # Check file content type (optional, but recommended)
+        if not file.content_type in ["text/csv", "application/vnd.ms-excel", "application/csv"]:
+            log.warning(f"User {current_user.id} uploaded file with unexpected content type: {file.content_type}")
+            # Continue processing but log the warning - content type is often unreliable
+            
+        predictions = await get_predictions_from_csv(
+            db=db,
+            current_user=current_user,
+            internal_model_id=model_id,
+            file=file,
+            task=task,
+            output_type=output_type,
+            config=config
+        )
+        
+        log.info(f"Successfully generated predictions from CSV for model {model_id}")
+        return ModelPredictResponse(predictions=predictions)
+
+    except CSVParsingError as e:
+        log.error(f"CSV parsing error for user {current_user.id}, model {model_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except ModelServiceDownstreamUnavailableError as e:
+        log.error(f"CSV prediction failed for model {model_id} (user {current_user.id}): Downstream TabPFN service unavailable: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The TabPFN service is currently unavailable for prediction. Please try again later.",
+        )
+    except ModelServiceError as e:
+        log.error(f"Model service error during CSV prediction request for user {current_user.id}: {e}", exc_info=True)
+        
+        # Map service errors to appropriate HTTP status codes
+        if "not found" in str(e).lower():
+            status_code = status.HTTP_404_NOT_FOUND
+        elif "access denied" in str(e).lower():
+            status_code = status.HTTP_403_FORBIDDEN
+        elif "decrypt" in str(e).lower():
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        else:
+            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=str(e)
+        )
+    except Exception as e:
+        log.exception(f"Unexpected error during CSV prediction request for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected internal error occurred."
         )
 
 # Placeholder for GET /models endpoint (Milestone 5) 

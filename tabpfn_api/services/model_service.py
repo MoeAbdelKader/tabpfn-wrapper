@@ -1,7 +1,9 @@
 import logging
 from typing import List, Dict, Any
 import uuid
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
+import pandas as pd
+import io
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -22,6 +24,12 @@ class ModelServiceError(Exception):
 # Define new service-level exception
 class ModelServiceDownstreamUnavailableError(ModelServiceError):
     """Raised when the downstream TabPFN service is unavailable during a model operation."""
+    pass
+
+
+# Define new CSV-specific exception
+class CSVParsingError(ModelServiceError):
+    """Raised when there's an error parsing a CSV file."""
     pass
 
 
@@ -279,3 +287,269 @@ async def list_user_models(db: AsyncSession, current_user: User) -> List[ModelMe
         log.exception(f"Database error while listing models for user ID: {user_id}: {e}")
         # Raise a generic service error for unexpected DB issues
         raise ModelServiceError(f"Database error while retrieving models for user {user_id}") from e 
+
+async def train_model_from_csv(
+    db: AsyncSession,
+    current_user: User,
+    file: UploadFile,
+    target_column: str,
+    config: Dict[str, Any] | None = None
+) -> str:
+    """Parses a CSV file, extracts features and target, and trains a TabPFN model.
+
+    Args:
+        db: The async database session.
+        current_user: The authenticated User object.
+        file: The uploaded CSV file.
+        target_column: The name of the column to use as the target variable.
+        config: Optional dictionary of configuration for TabPFN's fit method.
+
+    Returns:
+        The internally generated UUID (as string) for the trained model.
+
+    Raises:
+        CSVParsingError: If the CSV parsing fails or target_column is not found.
+        ModelServiceError: If decryption fails, TabPFN fitting fails, or DB operations fail.
+        ModelServiceDownstreamUnavailableError: If TabPFN service connection fails during fit.
+    """
+    config = config or {}  # Ensure config is a dict
+    log.info(f"User ID {current_user.id} initiating model training from CSV upload.")
+
+    # 1. Parse the CSV file
+    try:
+        # Read the CSV content
+        contents = await file.read()
+        
+        # Try to parse with pandas, handling common encodings
+        try:
+            df = pd.read_csv(io.BytesIO(contents))
+        except UnicodeDecodeError:
+            # Try with different encoding if UTF-8 fails
+            df = pd.read_csv(io.BytesIO(contents), encoding='latin1')
+        
+        log.info(f"Successfully parsed CSV with {len(df)} rows and {len(df.columns)} columns.")
+        
+        # Validate that target_column exists
+        if target_column not in df.columns:
+            available_columns = ', '.join(df.columns)
+            log.error(f"Target column '{target_column}' not found in CSV. Available columns: {available_columns}")
+            raise CSVParsingError(f"Target column '{target_column}' not found in CSV. Available columns: {available_columns}")
+        
+        # Extract target and features
+        target = df[target_column].tolist()
+        features_df = df.drop(columns=[target_column])
+        feature_names = features_df.columns.tolist()
+        
+        # Convert features to list of lists format expected by TabPFN
+        features = features_df.values.tolist()
+        
+        log.debug(f"Extracted target (length: {len(target)}) and features (shape: {len(features)}x{len(features[0]) if features else 0})")
+    
+    except pd.errors.ParserError as e:
+        log.error(f"Failed to parse CSV file: {e}", exc_info=True)
+        raise CSVParsingError(f"Failed to parse CSV file: {e}")
+    except Exception as e:
+        if isinstance(e, CSVParsingError):
+            raise  # Re-raise if already a CSVParsingError
+        log.error(f"Unexpected error processing CSV file: {e}", exc_info=True)
+        raise CSVParsingError(f"Error processing CSV file: {e}")
+    finally:
+        # Reset file pointer in case it's needed elsewhere
+        await file.seek(0)
+
+    # 2. Decrypt the user's TabPFN token
+    try:
+        decrypted_tabpfn_token = decrypt_token(current_user.encrypted_tabpfn_token)
+        log.debug(f"Successfully decrypted TabPFN token for user ID {current_user.id}.")
+    except InvalidToken:
+        log.error(f"Failed to decrypt TabPFN token for user ID {current_user.id}.")
+        raise ModelServiceError("Internal error: Could not decrypt stored credentials.")
+    except Exception as e:
+        log.exception(f"Unexpected error decrypting token for user {current_user.id}")
+        raise ModelServiceError(f"Internal error during credential decryption: {e}")
+
+    # 3. Call the TabPFN interface to fit the model
+    try:
+        tabpfn_train_set_uid = fit_model(
+            tabpfn_token=decrypted_tabpfn_token,
+            features=features,
+            target=target,
+            config=config
+        )
+        log.info(f"TabPFN fitting complete for user ID {current_user.id}. train_set_uid: {tabpfn_train_set_uid}")
+    except TabPFNConnectionError as e:
+        log.error(f"Model training failed for user ID {current_user.id}: TabPFN connection error: {e}")
+        raise ModelServiceDownstreamUnavailableError(f"Could not train model: TabPFN service connection failed.") from e
+    except TabPFNInterfaceError as e:
+        log.warning(f"TabPFN interface error during fitting for user ID {current_user.id}: {e}")
+        raise ModelServiceError(f"Failed to train model: {e}") from e
+    except Exception as e:
+        log.exception(f"Unexpected error during model fitting process for user {current_user.id}")
+        raise ModelServiceError(f"An unexpected internal error occurred during model training: {e}") from e
+
+    # 4. Prepare and save metadata to the database
+    try:
+        # Calculate basic metadata
+        sample_count = len(features)
+        feature_count = len(features[0]) if sample_count > 0 else 0
+
+        # Create the ModelMetadata object
+        db_model_metadata = ModelMetadata(
+            tabpfn_train_set_uid=tabpfn_train_set_uid,
+            user_id=current_user.id,
+            feature_count=feature_count,
+            sample_count=sample_count,
+            feature_names=feature_names,
+            tabpfn_config=config
+        )
+
+        db.add(db_model_metadata)
+        await db.commit()
+        await db.refresh(db_model_metadata)
+
+        internal_model_id = str(db_model_metadata.internal_model_id)
+        log.info(f"Successfully saved ModelMetadata for user ID {current_user.id}. Internal model ID: {internal_model_id}")
+
+        return internal_model_id
+
+    except Exception as e:
+        log.exception(f"Failed to save ModelMetadata to database for user ID {current_user.id}. Rolling back.")
+        await db.rollback()
+        raise ModelServiceError("Failed to save model metadata after training.") from e
+
+async def get_predictions_from_csv(
+    db: AsyncSession,
+    current_user: User,
+    internal_model_id: str,
+    file: UploadFile,
+    task: str,
+    output_type: str = "mean",
+    config: Dict[str, Any] | None = None
+) -> List[Any]:
+    """Parses a CSV file, extracts features, and gets predictions using a previously trained model.
+
+    Args:
+        db: The async database session.
+        current_user: The authenticated User object.
+        internal_model_id: The internal UUID of the trained model.
+        file: The uploaded CSV file.
+        task: The type of task ("classification" or "regression").
+        output_type: The type of prediction output (e.g., "mean", "median", "mode" for regression).
+        config: Optional dictionary of configuration options.
+
+    Returns:
+        The predictions as a list or dictionary (depending on output_type).
+
+    Raises:
+        CSVParsingError: If the CSV parsing fails.
+        ModelServiceError: If model not found, user doesn't own model, or prediction fails.
+        ModelServiceDownstreamUnavailableError: If TabPFN service connection fails during predict.
+    """
+    log.info(f"User ID {current_user.id} requesting predictions for model {internal_model_id} from CSV upload.")
+
+    # 1. Look up the model metadata (same as in get_predictions)
+    try:
+        try:
+            model_uuid = uuid.UUID(internal_model_id)
+        except ValueError:
+            log.warning(f"Invalid UUID format provided for model ID: {internal_model_id}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not found")
+
+        stmt = select(ModelMetadata).where(ModelMetadata.internal_model_id == model_uuid)
+        result = await db.execute(stmt)
+        model_metadata = result.scalar_one_or_none()
+    except Exception as e:
+        log.exception(f"Unexpected database error while looking up model {internal_model_id}")
+        raise ModelServiceError("Database error while retrieving model details") from e
+
+    if not model_metadata:
+        log.warning(f"Model with UUID {model_uuid} not found in database")
+        raise ModelServiceError("Model not found")
+
+    if model_metadata.user_id != current_user.id:
+        log.warning(f"User {current_user.id} attempted to access model {internal_model_id} owned by user {model_metadata.user_id}")
+        raise ModelServiceError("Access denied: You do not own this model")
+
+    log.info(f"Found model metadata for {internal_model_id}. train_set_uid: {model_metadata.tabpfn_train_set_uid}")
+
+    # 2. Parse the CSV file
+    try:
+        # Read the CSV content
+        contents = await file.read()
+        
+        # Try to parse with pandas, handling common encodings
+        try:
+            df = pd.read_csv(io.BytesIO(contents))
+        except UnicodeDecodeError:
+            # Try with different encoding if UTF-8 fails
+            df = pd.read_csv(io.BytesIO(contents), encoding='latin1')
+        
+        log.info(f"Successfully parsed CSV with {len(df)} rows and {len(df.columns)} columns.")
+        
+        # Check if the number of columns matches the expected feature count
+        expected_feature_count = model_metadata.feature_count
+        if len(df.columns) != expected_feature_count:
+            log.warning(f"CSV has {len(df.columns)} columns but model expects {expected_feature_count} features.")
+            
+            # If we have feature names from training, provide more specific guidance
+            if model_metadata.feature_names:
+                expected_features = ', '.join(model_metadata.feature_names)
+                log.warning(f"Expected features: {expected_features}")
+                raise CSVParsingError(
+                    f"CSV has {len(df.columns)} columns but model expects {expected_feature_count} features. "
+                    f"Expected features: {expected_features}"
+                )
+            else:
+                raise CSVParsingError(
+                    f"CSV has {len(df.columns)} columns but model expects {expected_feature_count} features."
+                )
+        
+        # Convert features to list of lists format expected by TabPFN
+        features = df.values.tolist()
+        
+        log.debug(f"Extracted features from CSV (shape: {len(features)}x{len(features[0]) if features else 0})")
+    
+    except pd.errors.ParserError as e:
+        log.error(f"Failed to parse CSV file: {e}", exc_info=True)
+        raise CSVParsingError(f"Failed to parse CSV file: {e}")
+    except Exception as e:
+        if isinstance(e, CSVParsingError):
+            raise  # Re-raise if already a CSVParsingError
+        log.error(f"Unexpected error processing CSV file: {e}", exc_info=True)
+        raise CSVParsingError(f"Error processing CSV file: {e}")
+    finally:
+        # Reset file pointer in case it's needed elsewhere
+        await file.seek(0)
+
+    # 3. Decrypt the user's TabPFN token
+    try:
+        decrypted_tabpfn_token = decrypt_token(current_user.encrypted_tabpfn_token)
+        log.debug(f"Successfully decrypted TabPFN token for user ID {current_user.id}")
+    except InvalidToken:
+        log.error(f"Failed to decrypt TabPFN token for user ID {current_user.id}")
+        raise ModelServiceError("Internal error: Could not decrypt stored credentials")
+    except Exception as e:
+        log.exception(f"Unexpected error decrypting token for user {current_user.id}")
+        raise ModelServiceError(f"Internal error during credential decryption: {e}")
+
+    # 4. Call the TabPFN interface to get predictions
+    try:
+        predictions = predict_model(
+            tabpfn_token=decrypted_tabpfn_token,
+            train_set_uid=model_metadata.tabpfn_train_set_uid,
+            features=features,
+            task=task,
+            output_type=output_type,
+            config=config
+        )
+        log.info(f"Successfully got predictions for model {internal_model_id}")
+        return predictions
+    except TabPFNConnectionError as e:
+        log.error(f"Prediction failed for model {internal_model_id}: TabPFN connection error: {e}")
+        raise ModelServiceDownstreamUnavailableError(f"Could not get predictions: TabPFN service connection failed.") from e
+    except TabPFNInterfaceError as e:
+        log.warning(f"TabPFN interface error during prediction for model {internal_model_id}: {e}")
+        raise ModelServiceError(f"Failed to get predictions: {e}") from e
+    except Exception as e:
+        log.exception(f"Unexpected error during prediction process for model {internal_model_id}")
+        raise ModelServiceError(f"An unexpected internal error occurred during prediction: {e}") from e 

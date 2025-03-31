@@ -218,3 +218,61 @@ class UserModelListResponse(BaseModel):
                 ]
             }
         }
+
+# --- CSV Upload Endpoint Schemas ---
+
+class ModelCSVFitRequest(BaseModel):
+    """Schema definition for the query parameters of the POST /models/fit/upload endpoint."""
+    target_column: str = Field(
+        ..., 
+        description="Name of the column in the CSV to use as the target variable."
+    )
+    config: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Optional dictionary of configuration options passed directly to TabPFN client's fit method (e.g., {'paper_version': True})."
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "target_column": "species",
+                "config": {"paper_version": False}
+            }
+        }
+
+# Reuse ModelFitResponse for CSV upload response
+
+class ModelCSVPredictRequest(BaseModel):
+    """Schema definition for the query parameters of the POST /models/{model_id}/predict/upload endpoint."""
+    task: str = Field(
+        ...,
+        description="Task type: 'classification' or 'regression'. Must match the task the model was trained for.",
+        pattern="^(classification|regression)$"
+    )
+    output_type: str = Field(
+        default="mean",
+        description="Specifies output format for regression tasks ('mean', 'median', 'mode', 'quantiles', 'full', 'main'). Ignored for classification."
+    )
+    config: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Optional dictionary of configuration options passed directly to TabPFN client's predict method."
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "task": "classification",
+                "output_type": "mean",
+                "config": {}
+            }
+        }
+
+    @field_validator('output_type')
+    def check_output_type(cls, v, values: ValidationInfo):
+        if 'task' in values.data and values.data['task'] == 'regression':
+            valid_types = {'mean', 'median', 'mode', 'quantiles', 'full', 'main'}
+            if v not in valid_types:
+                raise ValueError(f"Invalid output_type for regression. Must be one of: {valid_types}")
+        return v
+
+# Reuse ModelPredictResponse for CSV upload response

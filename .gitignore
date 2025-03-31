@@ -171,3 +171,5 @@ $RECYCLE.BIN/
 # Test artifacts
 *.db
 *.db-journal
+tests/manual_tests/predict_data.csv
+tests/manual_tests/test_data.csv

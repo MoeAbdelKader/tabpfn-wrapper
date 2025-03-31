@@ -15,6 +15,7 @@ python-dotenv>=1.0.0
 
 # Data Handling
 pandas==2.2.1
+python-multipart>=0.0.5  # Required for file uploads in FastAPI
 
 # Security
 cryptography==42.0.5
