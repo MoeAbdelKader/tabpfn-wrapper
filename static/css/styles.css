@@ -416,6 +416,52 @@ hr {
   margin-top: var(--spacing-md);
 }
 
+/* Predictions table styling */
+.prediction-table {
+  width: 100%;
+  margin: var(--spacing-md) 0 var(--spacing-lg);
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow-x: auto;
+  display: block;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.prediction-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.prediction-table th {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 500;
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.prediction-table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.prediction-table tr:hover td {
+  background-color: var(--bg-tertiary);
+}
+
+.prediction-column {
+  color: var(--accent) !important;
+  font-weight: 500;
+}
+
+.prediction-table tbody tr:nth-child(even) {
+  background-color: var(--bg-secondary);
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   :root {

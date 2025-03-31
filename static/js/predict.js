@@ -11,6 +11,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const resultPreviewDiv = document.getElementById('result-preview');
     const downloadLink = document.getElementById('download-results-link');
 
+    // Store CSV data for combining with predictions later
+    let csvHeaders = [];
+    let csvData = [];
+
     const apiKey = sessionStorage.getItem('tabpfn_api_wrapper_key');
     if (!apiKey) {
         window.location.href = '/'; // Redirect if not logged in
@@ -34,6 +38,43 @@ document.addEventListener('DOMContentLoaded', async () => {
              URL.revokeObjectURL(downloadLink.href); // Clean up old blob URLs
         }
     };
+
+    // Parse CSV function
+    const parseCSV = (text) => {
+        // Simple CSV parser - for more complex cases, consider using a library
+        const rows = text.split('\n').filter(row => row.trim());
+        const headers = rows[0].split(',').map(h => h.trim());
+        
+        const data = rows.slice(1).map(row => {
+            const values = row.split(',').map(val => val.trim());
+            return values;
+        });
+        
+        return { headers, data };
+    };
+
+    // Handle CSV file selection to store data
+    csvFileInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const { headers, data } = parseCSV(e.target.result);
+                csvHeaders = headers;
+                csvData = data;
+                console.log('CSV parsed successfully:', { headers, rowCount: data.length });
+            } catch (err) {
+                console.error('Error parsing CSV:', err);
+                showError('Error parsing CSV file. Please check the format.');
+            }
+        };
+        reader.onerror = () => {
+            showError('Error reading the CSV file.');
+        };
+        reader.readAsText(file);
+    });
 
     // --- Load Models into Dropdown ---    
     try {
@@ -94,6 +135,95 @@ document.addEventListener('DOMContentLoaded', async () => {
         submitButton.disabled = true;
     }
     
+    // Create HTML table from data and predictions
+    const createTable = (headers, data, predictions, outputType) => {
+        const table = document.createElement('table');
+        table.className = 'prediction-table';
+        
+        // Create header row
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        
+        // Add original headers
+        headers.forEach(header => {
+            const th = document.createElement('th');
+            th.textContent = header;
+            headerRow.appendChild(th);
+        });
+        
+        // Add prediction header
+        const predHeader = document.createElement('th');
+        predHeader.textContent = outputType === 'probabilities' ? 'Probabilities' : 'Prediction';
+        predHeader.className = 'prediction-column';
+        headerRow.appendChild(predHeader);
+        
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+        
+        // Create table body
+        const tbody = document.createElement('tbody');
+        
+        // Add data rows
+        data.forEach((row, index) => {
+            if (index >= predictions.length) return; // Skip if no prediction
+            
+            const tr = document.createElement('tr');
+            
+            // Add original data cells
+            row.forEach(cell => {
+                const td = document.createElement('td');
+                td.textContent = cell;
+                tr.appendChild(td);
+            });
+            
+            // Add prediction cell
+            const predCell = document.createElement('td');
+            predCell.className = 'prediction-column';
+            
+            // Format prediction based on type
+            if (outputType === 'probabilities' && Array.isArray(predictions[index])) {
+                // For probabilities, show formatted percentages
+                const probs = predictions[index]
+                    .map((p, i) => `Class ${i}: ${(p * 100).toFixed(2)}%`)
+                    .join('<br>');
+                predCell.innerHTML = probs;
+            } else {
+                // For standard predictions, show the value
+                predCell.textContent = JSON.stringify(predictions[index]);
+            }
+            
+            tr.appendChild(predCell);
+            tbody.appendChild(tr);
+        });
+        
+        table.appendChild(tbody);
+        return table;
+    };
+
+    // Format CSV for download
+    const formatCSVForDownload = (headers, data, predictions, outputType) => {
+        // Create header row with original headers + prediction
+        const headerRow = [...headers, outputType === 'probabilities' ? 'Probabilities' : 'Prediction'];
+        
+        // Create data rows with original data + prediction
+        const rows = data.map((row, index) => {
+            if (index >= predictions.length) return row; // Skip if no prediction
+            
+            // For probabilities, we need to handle the array format
+            let predictionValue;
+            if (outputType === 'probabilities' && Array.isArray(predictions[index])) {
+                predictionValue = JSON.stringify(predictions[index]);
+            } else {
+                predictionValue = JSON.stringify(predictions[index]);
+            }
+            
+            return [...row, predictionValue];
+        });
+        
+        // Combine into CSV string
+        const csvRows = [headerRow, ...rows];
+        return csvRows.map(row => row.join(',')).join('\n');
+    };
 
     // --- Form Submission Logic ---    
     predictForm.addEventListener('submit', async (event) => {
@@ -108,6 +238,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (!modelId || !file) {
             showError('Please select a model and a prediction CSV file.');
+            return;
+        }
+
+        // Check if CSV was successfully parsed
+        if (csvHeaders.length === 0 || csvData.length === 0) {
+            showError('Could not parse the CSV file or CSV is empty.');
             return;
         }
 
@@ -131,26 +267,34 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
 
             // Predictions might be returned directly as JSON array
-            const data = await response.json(); 
+            const responseData = await response.json(); 
 
             if (response.ok) {
                 resultDiv.style.display = 'block';
                 
-                // Display a preview (e.g., first 10 predictions)
-                let previewHtml = '<h4>Preview:</h4><pre>';
-                previewHtml += JSON.stringify(data.slice(0, 10), null, 2);
-                 if (data.length > 10) previewHtml += '\n... (more results truncated)';
-                previewHtml += '</pre>';
-                resultPreviewDiv.innerHTML = previewHtml;
+                // Check all possible locations where predictions might be in the response
+                const predictions = Array.isArray(responseData) ? responseData : 
+                                   responseData.predictions || 
+                                   responseData.data || 
+                                   responseData.results || 
+                                   [];
 
-                // Create a Blob and URL for downloading full results as CSV
-                // Assuming `data` is an array of predictions/probabilities
-                let csvContent = "data:text/csv;charset=utf-8,";
-                // Simple conversion: each item on a new line. Adapt if data structure is complex.
-                // For probabilities, you might want headers like 'prob_class_0,prob_class_1,...'
-                csvContent += data.map(row => JSON.stringify(row)).join("\r\n"); 
+                // Log for debugging
+                console.log('API Response:', responseData);
+                console.log('Extracted predictions:', predictions);
+
+                if (!Array.isArray(predictions)) {
+                    throw new Error('Unexpected response format. Could not extract predictions array.');
+                }
                 
-                const blob = new Blob([csvContent.substring(csvContent.indexOf(',') + 1)], { type: 'text/csv' });
+                // Generate the table with results
+                resultPreviewDiv.innerHTML = '<h4>Results:</h4>';
+                const table = createTable(csvHeaders, csvData, predictions, outputType);
+                resultPreviewDiv.appendChild(table);
+
+                // Create a Blob and URL for downloading combined results as CSV
+                const csvContent = formatCSVForDownload(csvHeaders, csvData, predictions, outputType);
+                const blob = new Blob([csvContent], { type: 'text/csv' });
                 downloadLink.href = URL.createObjectURL(blob);
                 downloadLink.download = `predictions_${modelId}_${new Date().toISOString()}.csv`;
                 downloadLink.style.display = 'inline-block';
@@ -160,12 +304,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     sessionStorage.removeItem('tabpfn_api_wrapper_key');
                     window.location.href = '/'; // Redirect if unauthorized
                 } else {
-                     showError(data.detail || 'An error occurred during prediction.');
+                     showError(responseData.detail || 'An error occurred during prediction.');
                 }
             }
         } catch (error) {
             console.error('Prediction Error:', error);
-            showError('An unexpected error occurred.');
+            showError(error.message || 'An unexpected error occurred.');
         } finally {
             progressDiv.style.display = 'none';
             submitButton.disabled = false;
