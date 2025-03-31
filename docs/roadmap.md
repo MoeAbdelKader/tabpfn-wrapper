@@ -195,7 +195,7 @@
     *   [x] Form with model selection dropdown (populated from user's models), file input for CSV, output type selector.
     *   [x] Implement client-side JS (`static/js/predict.js`) to handle form submission (using key from `sessionStorage`) to `POST /api/v1/models/{model_id}/predict/upload`.
     *   [x] Display prediction results (e.g., table preview or download link).
-*   [ ] Apply basic CSS (`static/css/styles.css`) for usability (or use compiled Tailwind output).
+*   [x] Apply basic CSS (`static/css/styles.css`) for usability (or use compiled Tailwind output).
 *   [ ] Add basic UI tests (e.g., checking page rendering, form presence).
 
 ---
