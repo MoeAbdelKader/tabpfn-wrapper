@@ -26,8 +26,8 @@ There are three main ways to use the TabPFN API Wrapper:
 *   **Access:** Navigate to [`https://tabpfnapi.com/`](https://tabpfnapi.com/) in your browser.
 *   **Purpose:**
     *   Generate your unique API Wrapper Key using your official TabPFN Token.
-    *   (If implemented) Access a dashboard to view/manage trained models.
-*   **Best for:** Initial setup, generating API keys, potentially visual interaction (if dashboard features exist).
+    *   Access a dashboard to view/manage trained models.
+*   **Best for:** Initial setup, generating API keys, potentially visual interaction
 
 ### 2. Cloud API (Programmatic Access)
 
