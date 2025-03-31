@@ -1,6 +1,6 @@
 # TabPFN API Wrapper
 
-This project provides a secure and managed RESTful API wrapper around the PriorLabs `tabpfn-client` library.
+This project provides a secure and managed RESTful API wrapper around the PriorLabs `tabpfn-client` library. You can access the Cloud UI here https://tabpfnapi.com
 
 ## Goal
 
