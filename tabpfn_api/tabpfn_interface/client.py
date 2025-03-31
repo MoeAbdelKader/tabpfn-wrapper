@@ -12,10 +12,13 @@ try:
     # ServiceClient is defined in the client.py file
     from tabpfn_client.client import ServiceClient
     from tabpfn_client import set_access_token # Import the function to set token
+    # Import estimator classes for list_available_models
+    from tabpfn_client.estimator import TabPFNClassifier, TabPFNRegressor
 except ImportError as e:
-    # If ServiceClient cannot be imported 
+    # If ServiceClient cannot be imported
     logging.exception(f"Failed to import from tabpfn_client: {e}")
-    raise ImportError(f"Could not import ServiceClient or set_access_token from tabpfn_client. Error: {e}") from e
+    # Update error message to reflect potential missing estimator imports
+    raise ImportError(f"Could not import ServiceClient, set_access_token, TabPFNClassifier, or TabPFNRegressor from tabpfn_client. Error: {e}") from e
 
 # Note: Specific exceptions like UsageLimitReached, ConnectionError were not found during import attempts.
 # We will rely on catching generic Exception and inspecting the message below.
@@ -26,6 +29,11 @@ log = logging.getLogger(__name__)
 
 class TabPFNInterfaceError(Exception):
     """Custom exception for errors originating from the TabPFN interface layer."""
+    pass
+
+# Add new exception here
+class TabPFNConnectionError(TabPFNInterfaceError):
+    """Custom exception for errors indicating the TabPFN service is unreachable."""
     pass
 
 # --- Fit Function ---
@@ -149,6 +157,7 @@ def verify_tabpfn_token(token: str) -> bool:
 
         # Check for potential connection errors
         # (Keywords based on common network error patterns)
+        # Raise exception instead of returning False
         elif (
             "connection error" in error_message or 
             "connection refused" in error_message or
@@ -159,7 +168,8 @@ def verify_tabpfn_token(token: str) -> bool:
             "503" in error_message # HTTP 503 Service Unavailable
         ):
             log.error(f"TabPFN token verification failed likely due to connection error: {e}")
-            return False # Treat as failure (token might be valid, but service unreachable)
+            # Raise specific exception instead of returning False
+            raise TabPFNConnectionError(f"Could not connect to TabPFN service: {e}") from e
 
         # Check for specific GCPOverloaded exception if library defines it, though import failed earlier
         # elif isinstance(e, GCPOverloaded): 
@@ -169,7 +179,7 @@ def verify_tabpfn_token(token: str) -> bool:
         # If none of the specific patterns match, log as unexpected and treat as failure
         else:
             log.exception(f"An unexpected and unhandled error occurred during TabPFN token verification: {e}")
-            return False 
+            return False # Return False for unexpected errors, leading to InvalidTabPFNTokenError
 
 def predict_model(
     tabpfn_token: str,
@@ -260,3 +270,41 @@ def predict_model(
         if "unexpected keyword argument" in str(e):
             log.error("Potential issue with arguments passed to ServiceClient.predict. Check client library signature.")
         raise TabPFNInterfaceError(f"Error during TabPFN prediction: {e}") from e 
+
+# --- Function to List Available TabPFN Models (Corrected) ---
+
+def get_available_tabpfn_models() -> Dict[str, List[str]]:
+    """Retrieves the lists of available TabPFN model systems from the client library.
+
+    These are hardcoded lists within the client library's estimator classes.
+    Does not require authentication or network access.
+
+    Returns:
+        A dictionary containing lists of available model names, keyed by task type:
+        {"classification": [...], "regression": [...]}
+
+    Raises:
+        TabPFNInterfaceError: If there's an unexpected error accessing the class attributes.
+    """
+    log.info("Attempting to retrieve list of available TabPFN models from client library classes.")
+    try:
+        # Call the classmethods directly
+        available_clf_models = TabPFNClassifier.list_available_models()
+        available_reg_models = TabPFNRegressor.list_available_models()
+
+        # Basic type check
+        if not isinstance(available_clf_models, list) or not isinstance(available_reg_models, list):
+            log.error(f"TabPFN estimator classes returned unexpected types. CLF: {type(available_clf_models)}, REG: {type(available_reg_models)}")
+            raise TabPFNInterfaceError("Received invalid format for available models list from TabPFN estimators.")
+
+        result = {
+            "classification": available_clf_models,
+            "regression": available_reg_models
+        }
+        log.info(f"Successfully retrieved available TabPFN models from classes: {result}")
+        return result
+
+    except Exception as e:
+        # Catch any unexpected error during class attribute access
+        log.exception(f"An unexpected error occurred retrieving available TabPFN models from estimator classes: {e}")
+        raise TabPFNInterfaceError(f"Error retrieving available models lists from TabPFN client library: {e}") from e 

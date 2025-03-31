@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from tabpfn_api.models.user import User
 from tabpfn_api.models.model import ModelMetadata
-from tabpfn_api.tabpfn_interface.client import fit_model, TabPFNInterfaceError, predict_model
+from tabpfn_api.tabpfn_interface.client import fit_model, predict_model, get_available_tabpfn_models, TabPFNInterfaceError, TabPFNConnectionError
 from tabpfn_api.core.security import decrypt_token, InvalidToken
 
 log = logging.getLogger(__name__)
@@ -16,6 +16,12 @@ log = logging.getLogger(__name__)
 
 class ModelServiceError(Exception):
     """Custom exception for model service layer errors."""
+    pass
+
+
+# Define new service-level exception
+class ModelServiceDownstreamUnavailableError(ModelServiceError):
+    """Raised when the downstream TabPFN service is unavailable during a model operation."""
     pass
 
 
@@ -42,6 +48,7 @@ async def train_new_model(
 
     Raises:
         ModelServiceError: If decryption fails, TabPFN fitting fails, or DB operations fail.
+        ModelServiceDownstreamUnavailableError: If TabPFN service connection fails during fit.
     """
     config = config or {} # Ensure config is a dict
     log.info(f"User ID {current_user.id} initiating model training.")
@@ -59,7 +66,9 @@ async def train_new_model(
         raise ModelServiceError(f"Internal error during credential decryption: {e}")
 
     # 2. Call the TabPFN interface to fit the model
+    tabpfn_train_set_uid = None # Initialize
     try:
+        # Wrap the fit_model call
         tabpfn_train_set_uid = fit_model(
             tabpfn_token=decrypted_tabpfn_token,
             features=features,
@@ -67,9 +76,11 @@ async def train_new_model(
             config=config
         )
         log.info(f"TabPFN fitting complete for user ID {current_user.id}. train_set_uid: {tabpfn_train_set_uid}")
+    except TabPFNConnectionError as e: # <-- Catch connection error
+        log.error(f"Model training failed for user ID {current_user.id}: TabPFN connection error: {e}")
+        raise ModelServiceDownstreamUnavailableError(f"Could not train model: TabPFN service connection failed.") from e
     except TabPFNInterfaceError as e:
         log.warning(f"TabPFN interface error during fitting for user ID {current_user.id}: {e}")
-        # Pass the interface error message upwards, potentially map to HTTP errors later
         raise ModelServiceError(f"Failed to train model: {e}") from e
     except Exception as e:
         log.exception(f"Unexpected error during model fitting process for user {current_user.id}")
@@ -98,6 +109,7 @@ async def train_new_model(
         internal_model_id = str(db_model_metadata.internal_model_id) # Convert UUID to string for return
         log.info(f"Successfully saved ModelMetadata for user ID {current_user.id}. Internal model ID: {internal_model_id}")
 
+        log.info(f"train_new_model completed successfully for user ID {current_user.id}, returning model ID {internal_model_id}")
         return internal_model_id
 
     except Exception as e:
@@ -132,6 +144,7 @@ async def get_predictions(
 
     Raises:
         ModelServiceError: If model not found, user doesn't own model, or prediction fails.
+        ModelServiceDownstreamUnavailableError: If TabPFN service connection fails during predict.
     """
     log.info(f"User ID {current_user.id} requesting predictions for model {internal_model_id}")
 
@@ -168,7 +181,7 @@ async def get_predictions(
         log.warning(f"User {current_user.id} attempted to access model {internal_model_id} owned by user {model_metadata.user_id}")
         raise ModelServiceError("Access denied: You do not own this model")
 
-    log.debug(f"Found model metadata for {internal_model_id}. train_set_uid: {model_metadata.tabpfn_train_set_uid}")
+    log.info(f"Found model metadata for {internal_model_id}. train_set_uid: {model_metadata.tabpfn_train_set_uid}")
 
     # 2. Decrypt the user's TabPFN token
     try:
@@ -182,7 +195,9 @@ async def get_predictions(
         raise ModelServiceError(f"Internal error during credential decryption: {e}")
 
     # 3. Call the TabPFN interface to get predictions
+    predictions = None # Initialize
     try:
+        # Wrap the predict_model call
         predictions = predict_model(
             tabpfn_token=decrypted_tabpfn_token,
             train_set_uid=model_metadata.tabpfn_train_set_uid,
@@ -192,11 +207,75 @@ async def get_predictions(
             config=config
         )
         log.info(f"Successfully got predictions for model {internal_model_id}")
+        log.info(f"get_predictions completed successfully for user ID {current_user.id}, model ID {internal_model_id}")
         return predictions
-
+    except TabPFNConnectionError as e: # <-- Catch connection error
+        log.error(f"Prediction failed for model {internal_model_id}: TabPFN connection error: {e}")
+        raise ModelServiceDownstreamUnavailableError(f"Could not get predictions: TabPFN service connection failed.") from e
     except TabPFNInterfaceError as e:
         log.warning(f"TabPFN interface error during prediction for model {internal_model_id}: {e}")
         raise ModelServiceError(f"Failed to get predictions: {e}") from e
     except Exception as e:
         log.exception(f"Unexpected error during prediction process for model {internal_model_id}")
         raise ModelServiceError(f"An unexpected internal error occurred during prediction: {e}") from e 
+
+# --- Service Function for Listing Available Models (Corrected) ---
+
+async def list_available_models() -> Dict[str, List[str]]:
+    """Retrieves the list of available base TabPFN models, categorized by task.
+
+    Returns:
+        A dictionary containing lists of available model system names, keyed by task:
+        {"classification": [...], "regression": [...]}
+
+    Raises:
+        ModelServiceError: For errors during retrieval from the client library.
+    """
+    log.info("Service request to list available TabPFN models.")
+    try:
+        # Call the corrected interface function (returns dict)
+        available_models_dict = get_available_tabpfn_models()
+        log.info("Successfully retrieved available models dict from interface.")
+        return available_models_dict
+    # Removed TabPFNConnectionError handling
+    except TabPFNInterfaceError as e:
+        log.error(f"Failed to list available models: TabPFN interface error: {e}")
+        # Map interface errors to service errors
+        raise ModelServiceError(f"Failed to retrieve available models list: {e}") from e
+    except Exception as e:
+        log.exception(f"Unexpected error listing available models: {e}")
+        raise ModelServiceError("An unexpected internal error occurred while listing available models.") from e
+
+# --- Service Function for Listing User's Trained Models ---
+
+async def list_user_models(db: AsyncSession, current_user: User) -> List[ModelMetadata]:
+    """Retrieves metadata for all models trained by the specified user.
+
+    Args:
+        db: The async database session.
+        current_user: The authenticated User object.
+
+    Returns:
+        A list of ModelMetadata ORM objects belonging to the user.
+
+    Raises:
+        ModelServiceError: If a database error occurs during the query.
+    """
+    user_id = current_user.id
+    log.info(f"Service request to list models for user ID: {user_id}")
+
+    try:
+        # Construct the query to select ModelMetadata filtered by user_id
+        stmt = select(ModelMetadata).where(ModelMetadata.user_id == user_id).order_by(ModelMetadata.created_at.desc())
+
+        # Execute the query
+        result = await db.execute(stmt)
+        user_models = result.scalars().all()
+
+        log.info(f"Found {len(user_models)} models for user ID: {user_id}")
+        return user_models
+
+    except Exception as e:
+        log.exception(f"Database error while listing models for user ID: {user_id}: {e}")
+        # Raise a generic service error for unexpected DB issues
+        raise ModelServiceError(f"Database error while retrieving models for user {user_id}") from e 

@@ -6,20 +6,55 @@ import uuid
 from tabpfn_api.db.database import get_db
 from tabpfn_api.models.user import User # Need User model for dependency typing
 from tabpfn_api.core.security import get_current_user # Use the updated dependency
-from tabpfn_api.schemas.model import ModelFitRequest, ModelFitResponse, ModelPredictRequest, ModelPredictResponse
-from tabpfn_api.services.model_service import train_new_model, get_predictions, ModelServiceError
+from tabpfn_api.schemas.model import (
+    ModelFitRequest, ModelFitResponse, ModelPredictRequest, ModelPredictResponse,
+    AvailableModelsResponse, UserModelListResponse
+)
+from tabpfn_api.services.model_service import (
+    train_new_model, get_predictions, list_available_models,
+    list_user_models, # Added list_user_models
+    ModelServiceError, ModelServiceDownstreamUnavailableError
+)
 
 log = logging.getLogger(__name__)
 router = APIRouter()
+
+# --- Responses for Fit Endpoint ---
+fit_responses = {
+    status.HTTP_201_CREATED: {
+        "description": "Model successfully trained and metadata stored.",
+        "model": ModelFitResponse,
+    },
+    status.HTTP_400_BAD_REQUEST: {
+        "description": "Invalid Input Data: Features/target dimensions mismatch, or incompatible data types.",
+    },
+    status.HTTP_401_UNAUTHORIZED: {
+        "description": "Authentication Required: Invalid or missing API key.",
+    },
+    status.HTTP_503_SERVICE_UNAVAILABLE: {
+        "description": "Service Unavailable: Error during TabPFN client operation (e.g., connection issue, client error) or internal decryption failure.",
+    },
+    status.HTTP_500_INTERNAL_SERVER_ERROR: {
+        "description": "Internal Server Error: Unexpected error during model training or metadata saving.",
+    },
+}
 
 @router.post(
     "/fit",
     response_model=ModelFitResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Train a new TabPFN model",
-    description="Submit feature and target data to train a new TabPFN model. "
-                "Returns an internal model ID for future reference (e.g., prediction).",
-    tags=["Models"]
+    summary="Train (Fit) a New TabPFN Model",
+    description=(
+        "Submits feature data (`features`) and target data (`target`) to train a new TabPFN model "
+        "using the PriorLabs service associated with the user's authenticated TabPFN token.\n\n"
+        "- Requires authentication via Bearer token (service API key).\n"
+        "- Performs basic validation on input dimensions.\n"
+        "- Calls the TabPFN client's `fit` method.\n"
+        "- Stores metadata about the trained model (feature count, sample count, TabPFN `train_set_uid`).\n"
+        "- Returns a unique internal `internal_model_id` (UUID) for this service, which is needed for subsequent predictions."
+    ),
+    tags=["Models"],
+    responses=fit_responses
 )
 async def fit_new_model(
     request_body: ModelFitRequest,
@@ -40,6 +75,12 @@ async def fit_new_model(
         log.info(f"Model training successful for user ID: {current_user.id}. Internal ID: {internal_model_id}")
         return ModelFitResponse(internal_model_id=internal_model_id)
 
+    except ModelServiceDownstreamUnavailableError as e:
+        log.error(f"Model fit failed for user {current_user.id}: Downstream TabPFN service unavailable: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The TabPFN service is currently unavailable for model training. Please try again later.",
+        )
     except ModelServiceError as e:
         # Handle errors raised from the service layer
         log.error(f"Model service error during fit request for user {current_user.id}: {e}", exc_info=True)
@@ -66,14 +107,47 @@ async def fit_new_model(
             detail="An unexpected internal error occurred.",
         )
 
+# --- Responses for Predict Endpoint ---
+predict_responses = {
+    status.HTTP_200_OK: {
+        "description": "Predictions successfully generated.",
+        "model": ModelPredictResponse,
+    },
+    status.HTTP_400_BAD_REQUEST: {
+        "description": "Invalid Input: Invalid model ID format or incompatible feature data.",
+    },
+    status.HTTP_401_UNAUTHORIZED: {
+        "description": "Authentication Required: Invalid or missing API key.",
+    },
+    status.HTTP_403_FORBIDDEN: {
+        "description": "Access Denied: The authenticated user does not own the requested model.",
+    },
+    status.HTTP_404_NOT_FOUND: {
+        "description": "Model Not Found: The requested model ID does not exist.",
+    },
+    status.HTTP_503_SERVICE_UNAVAILABLE: {
+        "description": "Service Unavailable: Error during TabPFN client prediction operation (e.g., connection issue, client error) or internal decryption failure.",
+    },
+    status.HTTP_500_INTERNAL_SERVER_ERROR: {
+        "description": "Internal Server Error: Unexpected error during prediction process.",
+    },
+}
+
 @router.post(
     "/{model_id}/predict",
     response_model=ModelPredictResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get predictions using a trained model",
-    description="Submit feature data to get predictions from a previously trained TabPFN model. "
-                "The model must belong to the authenticated user.",
-    tags=["Models"]
+    summary="Generate Predictions from a Trained Model",
+    description=(
+        "Uses a previously trained model (identified by `model_id`) to generate predictions "
+        "on new feature data (`features`).\n\n"
+        "- Requires authentication via Bearer token (service API key).\n"
+        "- Verifies that the `model_id` exists and belongs to the authenticated user.\n"
+        "- Calls the TabPFN client's `predict` method using the stored `train_set_uid`.\n"
+        "- Returns the predictions in the format specified by `task` and `output_type`."
+    ),
+    tags=["Models"],
+    responses=predict_responses
 )
 async def predict_with_model(
     model_id: str,
@@ -107,6 +181,12 @@ async def predict_with_model(
         log.info(f"Successfully generated predictions for model {model_id}")
         return ModelPredictResponse(predictions=predictions)
 
+    except ModelServiceDownstreamUnavailableError as e:
+        log.error(f"Prediction failed for model {model_id} (user {current_user.id}): Downstream TabPFN service unavailable: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The TabPFN service is currently unavailable for prediction. Please try again later.",
+        )
     except ModelServiceError as e:
         # Handle errors raised from the service layer
         log.error(f"Model service error during prediction request for user {current_user.id}: {e}", exc_info=True)
@@ -133,4 +213,111 @@ async def predict_with_model(
             detail="An unexpected internal error occurred."
         )
 
-# Placeholder for /models endpoint (Milestone 5) 
+# --- Responses for List Available Models Endpoint (Corrected) ---
+available_responses = {
+    status.HTTP_200_OK: {
+        "description": "Successfully retrieved the lists of available TabPFN base models.",
+        "model": AvailableModelsResponse,
+    },
+    status.HTTP_500_INTERNAL_SERVER_ERROR: {
+        "description": "Internal Server Error: An unexpected error occurred while retrieving the model lists from the client library.",
+    },
+}
+
+# --- Endpoint: GET /models/available (Corrected) ---
+
+@router.get(
+    "/available",
+    response_model=AvailableModelsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List Available TabPFN Base Models by Task",
+    description=(
+        "Retrieves lists of the names of the pre-trained TabPFN model systems "
+        "available within the client library, categorized by task ('classification', 'regression'). "
+        "These are hardcoded in the client library and do **not** represent models trained by users.\n\n"
+        "This endpoint does not require authentication."
+    ),
+    tags=["Models"],
+    responses=available_responses
+)
+async def get_list_of_available_models():
+    """Handles the request to list available TabPFN base models by task."""
+    try:
+        log.info("Received request to list available TabPFN models.")
+        model_dict = await list_available_models()
+        log.info("Successfully listed available models.")
+        return AvailableModelsResponse(available_models=model_dict)
+    except ModelServiceError as e:
+        log.error(f"Failed to list available models: Service error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An internal error occurred while retrieving the available models lists.",
+        )
+    except Exception as e:
+        # Catch any other unexpected errors
+        log.exception(f"Unexpected error listing available models: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected internal server error occurred.",
+        )
+
+# --- Responses for List User Models Endpoint ---
+user_models_responses = {
+    status.HTTP_200_OK: {
+        "description": "Successfully retrieved the list of models trained by the user.",
+        "model": UserModelListResponse,
+    },
+    status.HTTP_401_UNAUTHORIZED: {
+        "description": "Authentication Required: Invalid or missing API key.",
+    },
+    status.HTTP_500_INTERNAL_SERVER_ERROR: {
+        "description": "Internal Server Error: An unexpected error occurred while retrieving the user's models.",
+    },
+}
+
+# --- Endpoint: GET /models ---
+
+@router.get(
+    "/", # Mount at the root of the /models prefix
+    response_model=UserModelListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List User's Trained Models",
+    description=(
+        "Retrieves metadata for all models previously trained and saved by the authenticated user.\n\n"
+        "- Requires authentication via Bearer token (service API key).\n"
+        "- Returns a list, potentially empty, of model metadata objects."
+    ),
+    tags=["Models"],
+    responses=user_models_responses,
+    # Apply authentication dependency here
+    dependencies=[Depends(get_current_user)]
+)
+async def get_user_models_list(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user) # Need user object to pass to service
+):
+    """Handles the request to list the authenticated user's trained models."""
+    try:
+        log.info(f"Received request to list models for user ID: {current_user.id}")
+        # Call the service function to get list of ORM objects
+        user_model_orm_list = await list_user_models(db=db, current_user=current_user)
+        log.info(f"Successfully retrieved {len(user_model_orm_list)} models for user {current_user.id}.")
+        # Pydantic automatically maps ORM objects in the list to UserModelMetadataItem
+        # when creating the UserModelListResponse due to from_attributes=True
+        return UserModelListResponse(models=user_model_orm_list)
+    except ModelServiceError as e:
+        # Handle potential DB errors from the service layer
+        log.error(f"Failed to list models for user {current_user.id}: Service error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An internal error occurred while retrieving your models.",
+        )
+    except Exception as e:
+        # Catch any other unexpected errors
+        log.exception(f"Unexpected error listing models for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected internal server error occurred.",
+        )
+
+# Placeholder for GET /models endpoint (Milestone 5) 

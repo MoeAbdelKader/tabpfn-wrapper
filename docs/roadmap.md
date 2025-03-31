@@ -98,14 +98,14 @@
 ### Milestone 5: Basic Usability & Reliability
 
 *   **Goal:** Make the API minimally usable and robust.
-*   [ ] Refine Logging: Ensure important events (model fit start/end, prediction start/end, errors) are logged with relevant context (e.g., `model_id`).
-*   [ ] Refine Error Handling: Ensure `tabpfn-client` errors are caught and translated into user-friendly HTTP error responses (e.g., 400 Bad Request for invalid data, 503 Service Unavailable if TabPFN server fails).
-*   [ ] Improve API Documentation: Review and refine the auto-generated OpenAPI docs (via FastAPI). Add descriptions, examples to Pydantic models and endpoint definitions.
-*   [ ] Implement `GET /models/available` Endpoint:
+*   [x] Refine Logging: Ensure important events (model fit start/end, prediction start/end, errors) are logged with relevant context (e.g., `model_id`).
+*   [x] Refine Error Handling: Ensure `tabpfn-client` errors are caught and translated into user-friendly HTTP error responses (e.g., 400 Bad Request for invalid data, 503 Service Unavailable if TabPFN service fails).
+*   [x] Improve API Documentation: Review and refine the auto-generated OpenAPI docs (via FastAPI). Add descriptions, examples to Pydantic models and endpoint definitions.
+*   [x] Implement `GET /models/available` Endpoint:
     *   Add function to `tabpfn_interface` to call `TabPFNClassifier.list_available_models()` / `TabPFNRegressor.list_available_models()`.
     *   Add simple service function.
     *   Add API endpoint (does not require authentication).
-*   [ ] Implement `GET /models` Endpoint:
+*   [x] Implement `GET /models` Endpoint:
     *   Add service function to list `ModelMetadata` records associated with the authenticated user from the database.
     *   Add API endpoint requiring authentication.
 

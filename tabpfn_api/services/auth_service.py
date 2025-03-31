@@ -8,7 +8,7 @@ from tabpfn_api.core.security import (
     get_api_key_hash,
     encrypt_token,
 )
-from tabpfn_api.tabpfn_interface.client import verify_tabpfn_token
+from tabpfn_api.tabpfn_interface.client import verify_tabpfn_token, TabPFNConnectionError
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +20,11 @@ class AuthServiceError(Exception):
 
 class InvalidTabPFNTokenError(AuthServiceError):
     """Raised when the provided TabPFN token is invalid."""
+    pass
+
+
+class AuthServiceDownstreamUnavailableError(AuthServiceError):
+    """Raised when the downstream TabPFN service is unavailable during an operation."""
     pass
 
 
@@ -35,18 +40,33 @@ async def setup_user(db: AsyncSession, tabpfn_token: str) -> str:
 
     Raises:
         InvalidTabPFNTokenError: If the provided TabPFN token is not valid.
+        AuthServiceDownstreamUnavailableError: If the TabPFN service connection fails during verification.
         AuthServiceError: For other errors during the setup process.
     """
+    log.info("Entering setup_user function.")
+
     log.info("Attempting to set up a new user.")
 
     # 1. Verify the TabPFN token
-    is_valid = verify_tabpfn_token(token=tabpfn_token)
+    is_valid = False # Initialize
+    try:
+        # Attempt to verify the token, catching potential connection issues
+        is_valid = verify_tabpfn_token(token=tabpfn_token)
+    except TabPFNConnectionError as e:
+        log.error(f"User setup failed: Connection error during TabPFN token verification: {e}")
+        # Raise the specific service error for downstream unavailability
+        raise AuthServiceDownstreamUnavailableError("Could not verify token: TabPFN service connection failed.") from e
+    # Note: verify_tabpfn_token returns False for auth errors, True for success/rate limit
+
+    # This check happens only if no TabPFNConnectionError was raised
     if not is_valid:
-        log.warning("User setup failed: Invalid TabPFN token provided.")
-        raise InvalidTabPFNTokenError("The provided TabPFN token could not be verified.")
+        log.warning("User setup failed: Invalid TabPFN token provided (verification returned False).")
+        raise InvalidTabPFNTokenError("The provided TabPFN token could not be verified as valid.")
 
-    log.debug("TabPFN token verified successfully.")
+    # If we reach here, the token is considered valid (or rate limited) and connection was okay
+    log.info("TabPFN token verified successfully.")
 
+    # This try block handles errors during key generation, hashing, encryption, and DB storage
     try:
         # 2. Generate a new service API key
         plain_api_key = generate_api_key()
@@ -71,6 +91,7 @@ async def setup_user(db: AsyncSession, tabpfn_token: str) -> str:
         log.info(f"Successfully created and stored new user record with ID: {db_user.id}")
 
         # 6. Return the plain text service API key
+        log.info(f"User setup successful for user ID: {db_user.id}. Returning API key.")
         return plain_api_key
 
     except Exception as e:
