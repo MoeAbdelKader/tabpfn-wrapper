@@ -15,7 +15,74 @@ The primary goal is to allow users to interact with the TabPFN API for training 
 
 ## Getting Started
 
-*(Instructions will be added here once the basic setup is complete)*
+These instructions guide you through setting up and running the TabPFN Wrapper API locally using Docker.
+
+### Prerequisites
+
+*   [Docker](https://docs.docker.com/get-docker/) installed
+*   [Docker Compose](https://docs.docker.com/compose/install/) installed
+
+### 1. Clone the Repository
+
+```bash
+git clone <your-repository-url>
+cd tabpfn-wrapper
+```
+
+### 2. Configure Environment Variables
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+Edit the `.env` file and fill in the necessary details:
+
+*   **Database Credentials:** Set `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` for your local development database. These values will be used by Docker Compose to initialize the database container.
+*   **`SECRET_KEY`:** Generate a strong, unique secret key. You can use the following command:
+    ```bash
+    openssl rand -base64 32
+    ```
+    Paste the generated key into the `SECRET_KEY` field in `.env`.
+
+**Important:** The `DATABASE_URL` is constructed automatically from the other `POSTGRES_*` variables in the `.env` file for local development. The `POSTGRES_HOST` should remain `db` as this is the service name defined in `docker-compose.yml`.
+
+### 3. Build and Run with Docker Compose
+
+Build the Docker images and start the API and database containers:
+
+```bash
+docker-compose build
+docker-compose up -d
+```
+
+This command will:
+*   Build the `api` service image based on the `Dockerfile`.
+*   Build/pull the `postgres` image for the database.
+*   Start both containers in detached mode (`-d`).
+
+The API service should now be running and accessible.
+
+### 4. Verify the Service
+
+Check if the API is running by accessing the health endpoint:
+
+```bash
+curl http://localhost:8000/health
+```
+
+You should receive a response like:
+
+```json
+{"status": "ok"}
+```
+
+### 5. Next Steps
+
+Now that the service is running locally, refer to the **Usage Guide** below for instructions on how to:
+*   Authenticate and get your API key.
+*   Train models and make predictions using JSON or CSV uploads.
 
 ## Features
 
