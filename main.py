@@ -1,5 +1,8 @@
 import logging # Add logging import
 from fastapi import FastAPI, status
+from fastapi.staticfiles import StaticFiles # <-- Import StaticFiles
+from fastapi.templating import Jinja2Templates # <-- Import Jinja2Templates
+import os # <-- Import os
 
 # Import and call logging setup first
 from tabpfn_api.core.logging_config import setup_logging
@@ -15,6 +18,24 @@ app = FastAPI(
     description="An API wrapper for the PriorLabs TabPFN client.",
     version="0.1.0",
 )
+
+# --- UI Setup ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+
+# Create static and template directories if they don't exist
+# (Useful for initial setup, though typically managed by repo structure)
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(TEMPLATES_DIR, exist_ok=True)
+
+# Mount static files directory
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# Setup Jinja2 templates
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
+# --- End UI Setup ---
 
 # Import database initialization function
 from tabpfn_api.db.database import init_db
@@ -35,6 +56,11 @@ from tabpfn_api.api import models as models_router # Import the new models route
 #     log.info("Auth test router not found, skipping.")
 #     pass
 # --- END TEMPORARY ---
+
+# --- Import UI Router (Add this later when ui/routes.py is created) ---
+from tabpfn_api.ui import routes as ui_router # <-- Import the UI router
+app.include_router(ui_router.router, tags=["UI"], include_in_schema=False) # <-- Include the router
+# --- End UI Router Import ---
 
 @app.get("/", tags=["General"], status_code=status.HTTP_200_OK)
 async def read_root():
