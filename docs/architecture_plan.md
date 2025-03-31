@@ -131,6 +131,26 @@ We will use a standard 3-layer architecture within the FastAPI application, pack
         *   **Pro:** Simplest operational overhead, pay-for-use. **Con:** Platform limits (check if suitable for TabPFN's potential resource needs), less control than VM.
 *   **Chosen Strategy:** We will use **Google Cloud Run** for the initial deployment, coupled with Google Cloud SQL for PostgreSQL and Google Artifact Registry, leveraging managed services for simplicity and reliability.
 
+## 4.1. Monorepo UI Considerations (SSR with FastAPI/Jinja2)
+
+As we plan to add a Server-Side Rendered (SSR) web UI using Jinja2 (potentially styled with Tailwind CSS) directly served by the FastAPI backend within this monorepo, the following considerations apply:
+
+*   **Build Process Complexity:**
+    *   **Challenge:** Integrating frontend build tools (e.g., `npm` for Tailwind CSS compilation) into the primarily Python-based environment requires managing Node.js installation and build steps within our development workflow and Docker build.
+    *   **Mitigation:** Utilize **multi-stage Docker builds**. A preliminary stage can use a Node.js base image to install `npm` dependencies and compile static assets (CSS, JS). The final Python application stage then copies these compiled assets, keeping the production image lean and free of Node.js build tooling.
+*   **Dependency Management:**
+    *   **Challenge:** We will manage dependencies in two places: `requirements.txt` for Python and potentially `package.json` for Node.js (if using frontend build tools).
+    *   **Mitigation:** Maintain clear separation. Ensure the `Dockerfile` correctly handles both `pip install` and `npm install/build` in their respective stages. Document the complete setup in the project's `README.md`.
+*   **Docker Image Size:**
+    *   **Challenge:** Node.js dependencies (`node_modules`) and unoptimized static assets can significantly increase the final Docker image size.
+    *   **Mitigation:** Rely on multi-stage builds to discard build-time dependencies. Ensure build tools (like Tailwind) are configured to purge unused styles and minimize assets for production. Add `node_modules` and other build artifacts to `.dockerignore`.
+*   **Configuration/Environment:**
+    *   **Challenge:** Ensuring frontend build steps are consistent across different environments (local development, CI/CD).
+    *   **Mitigation:** Aim for frontend asset compilation to be environment-agnostic. If necessary, use environment variables cautiously during the build phase, but preferably generate static assets that work universally.
+*   **Deployment Coupling:**
+    *   **Challenge:** Any change (backend API, UI template, CSS) necessitates rebuilding and redeploying the *entire* application container.
+    *   **Mitigation:** This is inherent to the SSR monorepo model. Accept this coupling for now, focusing on fast, automated CI/CD pipelines. If the backend and frontend evolution paces diverge significantly in the future, reconsider migrating the UI to a separate repository and architecture (e.g., SPA).
+
 ## 5. Configuration Management
 
 *   Use environment variables for all configuration (database URL, API secrets, logging level, etc.).
