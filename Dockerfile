@@ -52,12 +52,9 @@ RUN mkdir -p /opt/venv/lib/python3.11/site-packages/tabpfn_client/.tabpfn && \
 # Use --chown to set the owner to the non-root user
 COPY --chown=appuser:appuser tabpfn_api ./tabpfn_api
 COPY --chown=appuser:appuser main.py .
-
-# Create the static directory needed by the application and ensure the appuser owns it
-RUN mkdir /app/static && chown appuser:appuser /app/static
-
-# Create the templates directory needed by the application and ensure the appuser owns it
-RUN mkdir /app/templates && chown appuser:appuser /app/templates
+# Copy templates and static files
+COPY --chown=appuser:appuser templates ./templates
+COPY --chown=appuser:appuser static ./static
 
 # Ensure the app directory is owned by the appuser
 # RUN chown -R appuser:appuser /app # This might be redundant due to --chown but can be added for safety
