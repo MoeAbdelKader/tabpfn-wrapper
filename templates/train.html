@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Train Model - TabPFN API Wrapper{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Train New Model</h2>
+    <p>Upload a CSV file containing your features and target variable to train a new TabPFN model.</p>
+
+    <form id="train-form">
+        <div>
+            <label for="train-csv-file">Training Data (CSV):</label><br>
+            <input type="file" id="train-csv-file" name="train-csv-file" accept=".csv" required>
+        </div>
+        <br>
+        <div>
+            <label for="target-column">Target Column:</label><br>
+            <select id="target-column" name="target-column" required disabled>
+                <option value="" selected>-- Select CSV file first --</option>
+            </select>
+        </div>
+        <br>
+        <div>
+            <label for="task-type">Task Type:</label><br>
+            <select id="task-type" name="task-type" required>
+                <option value="classification" selected>Classification</option>
+                <option value="regression">Regression</option> 
+                <!-- Add more if needed -->
+            </select>
+        </div>
+        <br>
+        <button type="submit" id="train-submit-button">Start Training</button>
+    </form>
+
+    <div id="training-progress" style="margin-top: 1em; display: none;">
+        <p>Training in progress... please wait.</p>
+        <!-- Optional: Add a spinner or progress indicator -->
+    </div>
+
+    <div id="train-result" style="margin-top: 1em; display: none;">
+        <h4>Training Complete!</h4>
+        <p>Model ID: <code id="result-model-id"></code></p>
+        <a href="/dashboard" class="button">Back to Dashboard</a>
+    </div>
+
+    <div id="train-error" style="color: red; margin-top: 1em; display: none;"></div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="/static/js/train.js"></script> <!-- We will create this later -->
+{% endblock %} 

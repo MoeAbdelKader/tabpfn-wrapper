@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}TabPFN API Wrapper{% endblock %}</title>
+    <!-- Placeholder for CSS -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <header>
+        <!-- Basic Header/Navbar can go here -->
+        <h1>TabPFN API Wrapper</h1>
+    </header>
+
+    <main>
+        {% block content %}
+        <!-- Page-specific content will be injected here -->
+        {% endblock %}
+    </main>
+
+    <footer>
+        <!-- Basic footer content -->
+        <p>&copy; 2024 Your Company Name</p>
+    </footer>
+
+    <!-- Placeholder for global JS -->
+    <script src="/static/js/main.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html> 

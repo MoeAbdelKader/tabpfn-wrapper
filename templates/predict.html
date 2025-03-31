@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Predict - TabPFN API Wrapper{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Make Predictions</h2>
+    <p>Select a trained model and upload a CSV file with data to get predictions.</p>
+
+    <form id="predict-form">
+        <div>
+            <label for="model-id">Select Model:</label><br>
+            <select id="model-id" name="model-id" required>
+                <option value="" selected>-- Loading models... --</option>
+                <!-- Models will be loaded here by JavaScript -->
+            </select>
+        </div>
+        <br>
+        <div>
+            <label for="predict-csv-file">Prediction Data (CSV):</label><br>
+            <input type="file" id="predict-csv-file" name="predict-csv-file" accept=".csv" required>
+        </div>
+        <br>
+        <div>
+            <label for="output-type">Output Type:</label><br>
+            <select id="output-type" name="output-type" required>
+                <option value="predictions" selected>Predictions</option>
+                <option value="probabilities">Probabilities</option> 
+                 <!-- Check if TabPFN supports others -->
+            </select>
+        </div>
+        <br>
+        <!-- Placeholder for task type if needed? 
+             The API expects it, but it's tied to the trained model. 
+             We might fetch it when loading models or assume based on output type? 
+             For now, let's assume the backend handles it or default to classification. 
+             Or pass it in JS based on model metadata if available.
+        -->
+        <button type="submit" id="predict-submit-button">Get Predictions</button>
+    </form>
+
+    <div id="predicting-progress" style="margin-top: 1em; display: none;">
+        <p>Generating predictions... please wait.</p>
+    </div>
+
+    <div id="predict-result" style="margin-top: 1em; display: none;">
+        <h4>Predictions Complete!</h4>
+        <div id="result-preview">
+            <!-- Prediction results preview (e.g., table) or download link will go here -->
+            <p>Results will appear here.</p>
+        </div>
+        <a href="#" id="download-results-link" style="display: none;">Download Full Results (CSV)</a>
+        <br><br>
+        <a href="/dashboard" class="button">Back to Dashboard</a>
+    </div>
+
+    <div id="predict-error" style="color: red; margin-top: 1em; display: none;"></div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="/static/js/predict.js"></script> <!-- We will create this later -->
+{% endblock %} 

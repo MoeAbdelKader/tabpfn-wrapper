@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - TabPFN API Wrapper{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Dashboard</h2>
+    <p>Manage your trained models and start new tasks.</p>
+
+    <div class="actions">
+        <a href="/train" class="button">Train New Model</a>
+        <a href="/predict" class="button">Make Predictions</a>
+    </div>
+
+    <hr>
+
+    <h3>Your Trained Models</h3>
+    <div id="models-list">
+        <!-- Models will be loaded here by JavaScript -->
+        <p>Loading models...</p>
+    </div>
+    <div id="models-error" style="color: red; margin-top: 1em; display: none;"></div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="/static/js/dashboard.js"></script> <!-- We will create this later -->
+{% endblock %} 
