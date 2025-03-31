@@ -149,10 +149,40 @@
 
 ---
 
-### Milestone 7: Further Enhancements (Future)
+### Milestone 7: CSV Upload API
 
+*   **Goal:** Allow training and prediction via CSV file uploads through the API.
+*   [ ] Add `pandas` dependency.
+*   [ ] Define `POST /api/v1/models/fit/upload` endpoint (with `target_column` parameter).
+*   [ ] Implement `train_model_from_csv` service function (parsing, error handling, calling `tabpfn_interface.fit_model`).
+*   [ ] Define `POST /api/v1/models/{model_id}/predict/upload` endpoint.
+*   [ ] Implement `get_predictions_from_csv` service function (parsing, error handling, calling `tabpfn_interface.predict_model`).
+*   [ ] Add integration tests for CSV upload endpoints.
+*   [ ] Update OpenAPI documentation for new endpoints.
+
+---
+
+### Milestone 8: Basic Web UI (Server-Side Rendering)
+
+*   **Goal:** Provide a simple web interface for core API interactions.
+*   [ ] Add `jinja2` dependency.
+*   [ ] Configure Jinja2 templates in FastAPI (`main.py`).
+*   [ ] Create `templates/` directory and basic HTML templates (`base.html`, `login.html`, `dashboard.html`, `train.html`, `predict.html`).
+*   [ ] Add UI router (`tabpfn_api/ui/routes.py`) to serve HTML pages.
+*   [ ] Implement frontend logic for `/auth/setup` interaction (displaying API key).
+*   [ ] Implement frontend form for CSV upload and training (`/models/fit/upload` API call).
+*   [ ] Implement frontend form for model selection, CSV upload, and prediction (`/models/{model_id}/predict/upload` API call).
+*   [ ] Implement display of trained models (`/models` API call).
+*   [ ] Apply basic CSS for usability.
+
+---
+
+### Milestone 9: Other Enhancements (Future)
+
+*   [ ] Add getting started guide in repository.
+*   [ ] Improve docs on how to use the API.
 *   [ ] Implement `DELETE /models/{model_id}` Endpoint.
-*   [ ] Add the ability for users to delete their account
+*   [ ] Add the ability for users to delete their account.
 *   [ ] Implement `GET /usage` Endpoint (requires calling `ServiceClient.get_api_usage`).
 *   [ ] Add more comprehensive testing (unit tests for services, edge cases).
 *   [ ] Implement Input Validation (e.g., check feature count matches expected for prediction).
@@ -160,4 +190,4 @@
 *   [ ] Investigate caching for `predict` calls if performance becomes an issue.
 *   [ ] Investigate asynchronous task handling for long `fit`/`predict` calls if needed.
 *   [ ] Optimize db queries for get_current_user_token. (We currently retrieve all records from the db and loop through them)
-*   [  ] Add ability for users to upload CSV files
+
