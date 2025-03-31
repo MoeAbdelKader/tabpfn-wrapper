@@ -37,7 +37,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
         }
 
-        const models = await response.json();
+        const data = await response.json();
+        // Check if models are inside a 'models' property or directly in the response
+        const models = data.models || data;
 
         modelsListDiv.innerHTML = ''; // Clear loading message
 
@@ -48,7 +50,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Display relevant info - adapt based on actual API response structure
                 // Assuming the response is a list of objects like: 
                 // { internal_model_id: "...", train_set_uid: "...", created_at: "...", metadata: {...} }
-                li.textContent = `Model ID: ${model.internal_model_id} (TabPFN UID: ${model.train_set_uid}) - Created: ${new Date(model.created_at).toLocaleString()}`;
+                li.textContent = `Model ID: ${model.internal_model_id} (Created: ${new Date(model.created_at).toLocaleString()})`;
                 // Add delete button later if needed
                 ul.appendChild(li);
             });

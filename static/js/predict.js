@@ -55,7 +55,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
         }
 
-        const models = await response.json();
+        const data = await response.json();
+        // Check if models are inside a 'models' property or directly in the response
+        const models = data.models || data;
         
         modelSelect.innerHTML = ''; // Clear "Loading..."
         if (models && models.length > 0) {
