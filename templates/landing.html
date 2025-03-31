@@ -5,45 +5,40 @@
 {% block content %}
 <div class="container">
     <h2>Welcome to the TabPFN API Wrapper</h2>
-    <p>This service allows you to interact with the TabPFN model via a simple API.</p>
-
-    <hr>
+    <p>A RESTful API service providing secure, language-agnostic access to TabPFN's powerful tabular data modeling capabilities. Train models, make predictions, and manage your workflows through simple HTTP requests.</p>
 
     <div id="setup-section">
         <h3>Get Your API Wrapper Key</h3>
         <p>If this is your first time, enter your official TabPFN Token below to generate a unique API key for this wrapper service.</p>
         <form id="setup-form">
-            <label for="tabpfn-token">TabPFN Token:</label><br>
-            <input type="password" id="tabpfn-token" name="tabpfn-token" required><br><br> <!-- Use type=password -->
+            <label for="tabpfn-token">TabPFN Token:</label>
+            <input type="password" id="tabpfn-token" name="tabpfn-token" required>
             <button type="submit">Generate API Key</button>
         </form>
-        <div id="setup-result" style="margin-top: 1em; display: none;">
+        <div id="setup-result" style="display: none;">
             <h4>Your API Wrapper Key (Save Securely!):</h4>
-            <input type="text" id="generated-api-key" readonly style="width: 80%;">
+            <input type="text" id="generated-api-key" readonly>
             <button id="copy-key-button">Copy</button>
-            <p style="color: red;">Please copy and save this key now. It will not be shown again.</p>
+            <p class="warning">Please copy and save this key now. It will not be shown again.</p>
             <button id="proceed-after-setup">Go to Dashboard</button>
         </div>
-        <div id="setup-error" style="color: red; margin-top: 1em; display: none;"></div>
+        <div id="setup-error" class="error" style="display: none;"></div>
     </div>
-
-    <hr>
 
     <div id="access-section">
         <h3>Access Dashboard</h3>
         <p>If you already have your API Wrapper Key, enter it below to access your dashboard.</p>
         <form id="access-form">
-            <label for="api-wrapper-key">API Wrapper Key:</label><br>
-            <input type="password" id="api-wrapper-key" name="api-wrapper-key" required><br><br> <!-- Use type=password -->
+            <label for="api-wrapper-key">API Wrapper Key:</label>
+            <input type="password" id="api-wrapper-key" name="api-wrapper-key" required>
             <button type="submit">Go to Dashboard</button>
         </form>
-         <div id="access-error" style="color: red; margin-top: 1em; display: none;"></div>
+        <div id="access-error" class="error" style="display: none;"></div>
     </div>
-
 </div>
 {% endblock %}
 
 {% block scripts %}
-{{ super() }} <!-- Optional: Include scripts from base.html if any -->
+{{ super() }}
 <script src="/static/js/landing.js"></script>
 {% endblock %} 
