@@ -2,6 +2,10 @@
 
 This project provides a secure and managed RESTful API wrapper around the PriorLabs `tabpfn-client` library.
 
+## Disclaimer ⚠️
+
+**This is an experimental project and is provided "as-is" without warranty of any kind, express or implied.** Features may change, and stability & security are not guaranteed. Please use it at your own risk and test thoroughly for your use cases.
+
 ## Goal
 
 The primary goal is to allow users to interact with the TabPFN API for training (`fit`) and prediction (`predict`) via a RESTful API, allowing agnostic use of TabPFN via any programming language that can make HTTP requests. Users register their TabPFN token once with this service and receive a service-specific API key for subsequent interactions.
@@ -12,6 +16,56 @@ The primary goal is to allow users to interact with the TabPFN API for training 
 *   **Database:** PostgreSQL (managed via SQLAlchemy and Alembic)
 *   **Containerization:** Docker & Docker Compose
 *   **TabPFN Interaction:** `tabpfn-client` library
+
+## Usage Modes
+
+There are three main ways to use the TabPFN API Wrapper:
+
+### 1. Web UI (Cloud Deployment)
+
+*   **Access:** Navigate to [`https://tabpfnapi.com/`](https://tabpfnapi.com/) in your browser.
+*   **Purpose:**
+    *   Generate your unique API Wrapper Key using your official TabPFN Token.
+    *   (If implemented) Access a dashboard to view/manage trained models.
+*   **Best for:** Initial setup, generating API keys, potentially visual interaction (if dashboard features exist).
+
+### 2. Cloud API (Programmatic Access)
+
+*   **Base URL:** `https://tabpfnapi.com`
+*   **Authentication:**
+    1.  Obtain your API Wrapper Key via the Web UI setup process.
+    2.  Include the key in the `Authorization: Bearer YOUR_WRAPPER_KEY` header for all API calls (except the initial setup).
+*   **Documentation:** Full details on endpoints, request/response formats are available at [`https://tabpfnapi.com/redoc`](https://tabpfnapi.com/redoc).
+*   **Example:** See `tests/manual_tests/test_deployed_api.py` for a Python client example.
+*   **Best for:** Integrating TabPFN predictions/training into your own applications, scripts, or automated workflows.
+
+### 3. Local Development / Hosting
+
+*   **Purpose:** Running the API service directly on your own machine for development, testing, or local use.
+*   **Steps:**
+    1.  **Clone the repository:**
+        ```bash
+        git clone https://github.com/MoeAbdelKader/tabpfn-wrapper.git
+        cd tabpfn-wrapper
+        ```
+    2.  **Set up environment:** Create a Python virtual environment and install dependencies:
+        ```bash
+        python -m venv venv
+        source venv/bin/activate # or venv\Scripts\activate on Windows
+        pip install -r requirements.txt
+        ```
+    3.  **Configure environment variables:** Create a `.env` file in the project root (copy from `.env.example`) or set environment variables for:
+        *   `DATABASE_URL` (Connection string for your local/dev database, typically configured via other POSTGRES variables in `.env` for Docker setup)
+        *   `SECRET_KEY` (A strong random string for security)
+        *   `ALLOWED_ORIGINS` (e.g., `http://localhost:8000` if needed for local UI interaction)
+        *   `TABPFN_API_TOKEN` (Your official token, potentially needed for the local setup endpoint)
+    4.  **Run the server (using Docker Compose is recommended for local setup, see Getting Started below):**
+        ```bash
+        # If running without Docker (requires manual DB setup & env vars):
+        # uvicorn main:app --reload --port 8000
+        ```
+    5.  **Access:** If running locally (e.g., via Docker Compose), the API will be available at `http://localhost:8000`, including the docs at `http://localhost:8000/redoc`.
+*   **Best for:** Developing new features, testing changes locally before deployment, running in isolated environments.
 
 ## Getting Started
 
