@@ -1,6 +1,6 @@
 import logging
 import numpy as np
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 # Reverting the debug imports - sys and traceback are no longer needed unless debugging further
 # import sys 
 # import traceback
@@ -170,3 +170,93 @@ def verify_tabpfn_token(token: str) -> bool:
         else:
             log.exception(f"An unexpected and unhandled error occurred during TabPFN token verification: {e}")
             return False 
+
+def predict_model(
+    tabpfn_token: str,
+    train_set_uid: str,
+    features: List[List[Any]],
+    task: str,
+    output_type: str = "mean",
+    config: Dict[str, Any] | None = None
+) -> Union[List[Any], Dict[str, List[Any]]]:
+    """Calls the TabPFN client to get predictions using a previously trained model.
+
+    Args:
+        tabpfn_token: The user's valid TabPFN API token.
+        train_set_uid: The unique ID of the train set in TabPFN.
+        features: A list of lists representing the feature data to predict on.
+        task: The type of task ("classification" or "regression").
+        output_type: The type of prediction output (e.g., "mean", "median", "mode" for regression).
+        config: Optional dictionary of additional configuration options.
+
+    Returns:
+        The predictions as a list or a dictionary of lists.
+
+    Raises:
+        TabPFNInterfaceError: If data conversion fails or the TabPFN client raises an exception.
+    """
+    log.info(f"Attempting to get predictions via TabPFN client. Feature shape: ({len(features)}, {len(features[0]) if features else 0})")
+    # Ensure config is a dict if None
+    tabpfn_config_dict = config or {}
+    # Ensure paper_version key exists, defaulting to False if not provided by user
+    # This is needed because the client library pops this key.
+    if "paper_version" not in tabpfn_config_dict:
+        tabpfn_config_dict["paper_version"] = False
+
+    # 1. Convert input data to NumPy array
+    try:
+        X = np.array(features)
+        log.debug(f"Successfully converted input lists to NumPy array. X shape: {X.shape}")
+    except ValueError as e:
+        log.error(f"Failed to convert input lists to NumPy array: {e}", exc_info=True)
+        raise TabPFNInterfaceError(f"Invalid data format for features: {e}") from e
+    except Exception as e:
+        log.error(f"Unexpected error during NumPy conversion: {e}", exc_info=True)
+        raise TabPFNInterfaceError(f"Unexpected error converting data: {e}") from e
+
+    # 2. Set token and call ServiceClient.predict
+    try:
+        # Set the token globally for the client library
+        set_access_token(tabpfn_token)
+        log.debug("Access token set via tabpfn_client.set_access_token.")
+
+        # Prepare predict_params dictionary, including output_type for regression
+        predict_params_dict = {}
+        if task == "regression":
+            predict_params_dict["output_type"] = output_type
+            # Potentially add other regression-specific params like 'quantiles' here later if needed
+
+        log.debug(f"Using predict_params for ServiceClient.predict: {predict_params_dict}")
+        # Ensure the tabpfn_config_dict passed below has paper_version defaulted
+        log.debug(f"Using tabpfn_config for ServiceClient.predict: {tabpfn_config_dict}")
+
+        # Call predict with the prepared parameters
+        predictions = ServiceClient.predict(
+            train_set_uid=train_set_uid,
+            x_test=X,
+            task=task,
+            predict_params=predict_params_dict, # Pass the constructed dict
+            tabpfn_config=tabpfn_config_dict # Pass the original config here
+        )
+
+        # Convert NumPy array/dict back to Python list/dict
+        if isinstance(predictions, dict):
+            # Handle case where predictions is a dict (e.g., for quantiles or full output)
+            processed_predictions = {k: v.tolist() if isinstance(v, np.ndarray) else v 
+                                     for k, v in predictions.items()}
+        elif isinstance(predictions, np.ndarray):
+            processed_predictions = predictions.tolist()
+        else:
+            # Should not happen based on docs, but handle just in case
+            log.warning(f"Unexpected prediction output type from TabPFN client: {type(predictions)}")
+            processed_predictions = predictions
+
+        log.info(f"TabPFN client prediction successful. Output type: {type(processed_predictions)}")
+        return processed_predictions
+
+    except Exception as e:
+        log.exception(f"TabPFN client prediction failed: {e}")
+        # Check if the error message indicates an unexpected keyword argument again
+        if "unexpected keyword argument" in str(e):
+            log.error("Potential issue with arguments passed to ServiceClient.predict. Check client library signature.")
+        raise TabPFNInterfaceError(f"Error during TabPFN prediction: {e}") from e 

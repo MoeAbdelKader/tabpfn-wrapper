@@ -1,11 +1,14 @@
 import logging
 from typing import List, Dict, Any
+import uuid
+from fastapi import HTTPException, status
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from tabpfn_api.models.user import User
 from tabpfn_api.models.model import ModelMetadata
-from tabpfn_api.tabpfn_interface.client import fit_model, TabPFNInterfaceError
+from tabpfn_api.tabpfn_interface.client import fit_model, TabPFNInterfaceError, predict_model
 from tabpfn_api.core.security import decrypt_token, InvalidToken
 
 log = logging.getLogger(__name__)
@@ -103,3 +106,97 @@ async def train_new_model(
         # This is problematic: the model was trained in TabPFN, but we couldn't record it.
         # Consider adding cleanup logic or marking it as orphaned if possible.
         raise ModelServiceError("Failed to save model metadata after training.") from e 
+
+async def get_predictions(
+    db: AsyncSession,
+    current_user: User,
+    internal_model_id: str,
+    features: List[List[Any]],
+    task: str,
+    output_type: str = "mean",
+    config: Dict[str, Any] | None = None
+) -> List[Any]:
+    """Get predictions using a previously trained model.
+
+    Args:
+        db: The async database session.
+        current_user: The authenticated User object.
+        internal_model_id: The internal UUID of the trained model.
+        features: List of lists representing feature data to predict on.
+        task: The type of task ("classification" or "regression").
+        output_type: The type of prediction output (e.g., "mean", "median", "mode" for regression).
+        config: Optional dictionary of configuration options.
+
+    Returns:
+        The predictions as a list or dictionary (depending on output_type).
+
+    Raises:
+        ModelServiceError: If model not found, user doesn't own model, or prediction fails.
+    """
+    log.info(f"User ID {current_user.id} requesting predictions for model {internal_model_id}")
+
+    # 1. Look up the model metadata
+    model_metadata = None # Initialize
+    try:
+        # Convert the input string ID to a UUID object
+        try:
+            model_uuid = uuid.UUID(internal_model_id)
+        except ValueError:
+            log.warning(f"Invalid UUID format provided for model ID: {internal_model_id}")
+            # Treat invalid UUID format as model not found
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not found")
+
+        # Query the database
+        stmt = select(ModelMetadata).where(ModelMetadata.internal_model_id == model_uuid)
+        result = await db.execute(stmt)
+        model_metadata = result.scalar_one_or_none()
+
+    except Exception as e:
+        # Catch unexpected database errors during the query execution
+        log.exception(f"Unexpected database error while looking up model {internal_model_id}")
+        # Raise a generic service error for unexpected DB issues
+        raise ModelServiceError("Database error while retrieving model details") from e
+
+    # Handle Model Not Found case *after* the DB query attempt
+    if not model_metadata:
+        log.warning(f"Model with UUID {model_uuid} not found in database")
+        # Raise the specific error that the API layer expects for a 404
+        raise ModelServiceError("Model not found")
+
+    # Verify ownership (only if model was found)
+    if model_metadata.user_id != current_user.id:
+        log.warning(f"User {current_user.id} attempted to access model {internal_model_id} owned by user {model_metadata.user_id}")
+        raise ModelServiceError("Access denied: You do not own this model")
+
+    log.debug(f"Found model metadata for {internal_model_id}. train_set_uid: {model_metadata.tabpfn_train_set_uid}")
+
+    # 2. Decrypt the user's TabPFN token
+    try:
+        decrypted_tabpfn_token = decrypt_token(current_user.encrypted_tabpfn_token)
+        log.debug(f"Successfully decrypted TabPFN token for user ID {current_user.id}")
+    except InvalidToken:
+        log.error(f"Failed to decrypt TabPFN token for user ID {current_user.id}")
+        raise ModelServiceError("Internal error: Could not decrypt stored credentials")
+    except Exception as e:
+        log.exception(f"Unexpected error decrypting token for user {current_user.id}")
+        raise ModelServiceError(f"Internal error during credential decryption: {e}")
+
+    # 3. Call the TabPFN interface to get predictions
+    try:
+        predictions = predict_model(
+            tabpfn_token=decrypted_tabpfn_token,
+            train_set_uid=model_metadata.tabpfn_train_set_uid,
+            features=features,
+            task=task,
+            output_type=output_type,
+            config=config
+        )
+        log.info(f"Successfully got predictions for model {internal_model_id}")
+        return predictions
+
+    except TabPFNInterfaceError as e:
+        log.warning(f"TabPFN interface error during prediction for model {internal_model_id}: {e}")
+        raise ModelServiceError(f"Failed to get predictions: {e}") from e
+    except Exception as e:
+        log.exception(f"Unexpected error during prediction process for model {internal_model_id}")
+        raise ModelServiceError(f"An unexpected internal error occurred during prediction: {e}") from e 

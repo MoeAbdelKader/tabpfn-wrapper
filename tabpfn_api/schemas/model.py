@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field, field_validator, model_validator, ValidationInfo
+from typing import List, Dict, Any, Optional, Union
 import uuid
 
 # --- Base Schemas (Optional, for common fields) ---
@@ -66,8 +66,51 @@ class ModelFitResponse(BaseModel):
     internal_model_id: str = Field(..., description="The unique internal ID assigned to the trained model.")
 
 
-# --- Predict Endpoint Schemas (Placeholder for Milestone 4) ---
-# Will be added later
+# --- Predict Endpoint Schemas ---
+
+class ModelPredictRequest(BaseModel):
+    features: List[List[Any]] = Field(
+        ...,
+        description="Feature data as a list of lists (rows) to predict on. Example: [[1, 2.5, 'A'], [3, 4.0, 'B']]",
+        min_length=1  # Must have at least one row
+    )
+    task: str = Field(
+        ...,
+        description="The type of task: 'classification' or 'regression'",
+        pattern="^(classification|regression)$"  # Only allow these two values
+    )
+    output_type: str = Field(
+        default="mean",
+        description="For regression tasks: 'mean', 'median', 'mode', 'quantiles', 'full', or 'main'. For classification: ignored."
+    )
+    config: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Optional dictionary of configuration options passed directly to TabPFN's predict method."
+    )
+
+    @field_validator('features')
+    def check_features_non_empty_rows(cls, v):
+        if not v:  # Already checked by min_length, but good practice
+            raise ValueError("Features list cannot be empty.")
+        if not all(v):  # Check if any inner list (row) is empty
+            raise ValueError("Feature rows cannot be empty lists.")
+        return v
+
+    @field_validator('output_type')
+    def check_output_type(cls, v, values: ValidationInfo):
+        if 'task' in values.data and values.data['task'] == 'regression':
+            valid_types = {'mean', 'median', 'mode', 'quantiles', 'full', 'main'}
+            if v not in valid_types:
+                raise ValueError(f"Invalid output_type for regression. Must be one of: {valid_types}")
+        return v
+
+class ModelPredictResponse(BaseModel):
+    predictions: Union[List[Any], Dict[str, List[Any]]] = Field(
+        ...,
+        description="The model predictions. For classification, a list of predicted classes. "
+                   "For regression, either a list of predictions or a dictionary (e.g., for quantiles)."
+    )
+
 
 # --- List Endpoint Schemas (Placeholder for Milestone 5) ---
 # Will be added later 
