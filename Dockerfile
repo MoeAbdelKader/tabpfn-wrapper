@@ -53,6 +53,9 @@ RUN mkdir -p /opt/venv/lib/python3.11/site-packages/tabpfn_client/.tabpfn && \
 COPY --chown=appuser:appuser tabpfn_api ./tabpfn_api
 COPY --chown=appuser:appuser main.py .
 
+# Create the static directory needed by the application and ensure the appuser owns it
+RUN mkdir /app/static && chown appuser:appuser /app/static
+
 # Ensure the app directory is owned by the appuser
 # RUN chown -R appuser:appuser /app # This might be redundant due to --chown but can be added for safety
 
