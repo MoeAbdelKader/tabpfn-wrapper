@@ -168,33 +168,33 @@
 ### Milestone 8: Basic Web UI (Server-Side Rendering)
 
 *   **Goal:** Provide a simple, self-contained web interface for API setup and core modeling interactions, using server-side rendering.
-*   [ ] Add `jinja2` dependency to `requirements.txt`.
+*   [x] Add `jinja2` dependency to `requirements.txt`.
 *   [ ] (Optional) Add Node.js/npm to development environment and install `tailwindcss` dev dependency.
-*   [ ] Configure FastAPI (`main.py`) to use Jinja2Templates (pointing to `templates/` directory).
-*   [ ] Configure FastAPI (`main.py`) to mount a `/static` directory for CSS, JS, images.
-*   [ ] Create `templates/` directory.
-*   [ ] Create `static/` directory (with subdirs like `css/`, `js/`).
+*   [x] Configure FastAPI (`main.py`) to use Jinja2Templates (pointing to `templates/` directory).
+*   [x] Configure FastAPI (`main.py`) to mount a `/static` directory for CSS, JS, images.
+*   [x] Create `templates/` directory.
+*   [x] Create `static/` directory (with subdirs like `css/`, `js/`).
 *   [ ] (Optional) Configure `tailwind.config.js` to scan templates and set up build script (`package.json`) to compile Tailwind to `static/css/styles.css`.
-*   [ ] Add UI router (`tabpfn_api/ui/routes.py`) and include it in `main.py`.
-*   [ ] Create basic `templates/base.html` layout template.
-*   [ ] Create `templates/landing.html`:
-    *   [ ] Section 1: Input for *TabPFN Token*, button to call `POST /api/v1/auth/setup` via JS.
-    *   [ ] Section 2: Input for *API Wrapper Key*, button to proceed to dashboard.
-    *   [ ] Implement client-side JS (`static/js/landing.js`) to:
-        *   Handle API call for setup, display the returned *API Wrapper Key* prominently (with copy warning/button).
-        *   Store the API Wrapper Key (either newly generated or entered) in `sessionStorage`.
-        *   Redirect to the dashboard upon successful setup or key entry.
-*   [ ] Create `templates/dashboard.html`:
-    *   [ ] Display list of user's trained models (fetch via JS using key from `sessionStorage` to call `GET /api/v1/models`).
-    *   [ ] Links/buttons to navigate to Train and Predict pages.
-*   [ ] Create `templates/train.html`:
-    *   [ ] Form with file input for CSV, target column selector (populated by JS after file selection), task type selector.
-    *   [ ] Implement client-side JS (`static/js/train.js`) to handle form submission (using key from `sessionStorage`) to `POST /api/v1/models/fit/upload`.
-    *   [ ] Display resulting `model_id` or errors.
-*   [ ] Create `templates/predict.html`:
-    *   [ ] Form with model selection dropdown (populated from user's models), file input for CSV, output type selector.
-    *   [ ] Implement client-side JS (`static/js/predict.js`) to handle form submission (using key from `sessionStorage`) to `POST /api/v1/models/{model_id}/predict/upload`.
-    *   [ ] Display prediction results (e.g., table preview or download link).
+*   [x] Add UI router (`tabpfn_api/ui/routes.py`) and include it in `main.py`.
+*   [x] Create basic `templates/base.html` layout template.
+*   [x] Create `templates/landing.html`:
+    *   [x] Section 1: Input for *TabPFN Token*, button to call `POST /api/v1/auth/setup` via JS.
+    *   [x] Section 2: Input for *API Wrapper Key*, button to proceed to dashboard.
+    *   [x] Implement client-side JS (`static/js/landing.js`) to:
+        *   [x] Handle API call for setup, display the returned *API Wrapper Key* prominently (with copy warning/button).
+        *   [x] Store the API Wrapper Key (either newly generated or entered) in `sessionStorage`.
+        *   [x] Redirect to the dashboard upon successful setup or key entry.
+*   [x] Create `templates/dashboard.html`:
+    *   [x] Display list of user's trained models (fetch via JS using key from `sessionStorage` to call `GET /api/v1/models`).
+    *   [x] Links/buttons to navigate to Train and Predict pages.
+*   [x] Create `templates/train.html`:
+    *   [x] Form with file input for CSV, target column selector (populated by JS after file selection), task type selector.
+    *   [x] Implement client-side JS (`static/js/train.js`) to handle form submission (using key from `sessionStorage`) to `POST /api/v1/models/fit/upload`.
+    *   [x] Display resulting `model_id` or errors.
+*   [x] Create `templates/predict.html`:
+    *   [x] Form with model selection dropdown (populated from user's models), file input for CSV, output type selector.
+    *   [x] Implement client-side JS (`static/js/predict.js`) to handle form submission (using key from `sessionStorage`) to `POST /api/v1/models/{model_id}/predict/upload`.
+    *   [x] Display prediction results (e.g., table preview or download link).
 *   [ ] Apply basic CSS (`static/css/styles.css`) for usability (or use compiled Tailwind output).
 *   [ ] Add basic UI tests (e.g., checking page rendering, form presence).
 
