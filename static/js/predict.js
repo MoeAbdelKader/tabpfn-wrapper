@@ -233,17 +233,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Add visual indicator of which class is predicted
                 predCell.style.borderLeft = '3px solid var(--accent)';
             } else {
-                // For standard predictions (should be 0 or 1 for classification), show the value
+                // For standard predictions or when output_type is 'predictions' but API still returns probabilities
                 let predValue = predictions[index];
                 
-                // If it's still an array but we're in "predictions" mode,
-                // take the index of the max value as the predicted class
+                // If it's an array (probable if TabPFN API returns probabilities regardless of output_type)
                 if (Array.isArray(predValue)) {
-                    const maxIndex = predValue.indexOf(Math.max(...predValue));
-                    predValue = `Class ${maxIndex}`;
+                    if (outputType === 'predictions') {
+                        // If user requested 'predictions', just show the predicted class
+                        const maxIndex = predValue.indexOf(Math.max(...predValue));
+                        predValue = `Class ${maxIndex}`;
+                        predCell.style.fontWeight = 'bold';
+                    } else {
+                        // For any other case, stringify the array
+                        predValue = JSON.stringify(predValue);
+                    }
                 }
                 
                 predCell.textContent = predValue;
+                predCell.style.borderLeft = '3px solid var(--accent)';
             }
             
             tr.appendChild(predCell);
@@ -263,11 +270,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         const rows = data.map((row, index) => {
             if (index >= predictions.length) return row; // Skip if no prediction
             
-            // For probabilities, we need to handle the array format
             let predictionValue;
-            if (outputType === 'probabilities' && Array.isArray(predictions[index])) {
-                predictionValue = JSON.stringify(predictions[index]);
+            
+            // Handle different formats based on output type and what API returns
+            if (Array.isArray(predictions[index])) {
+                if (outputType === 'predictions') {
+                    // If user requested 'predictions', just include the predicted class
+                    const maxIndex = predictions[index].indexOf(Math.max(...predictions[index]));
+                    predictionValue = `Class ${maxIndex}`;
+                } else {
+                    // For probabilities, include the full array
+                    predictionValue = JSON.stringify(predictions[index]);
+                }
             } else {
+                // Not an array, use as is
                 predictionValue = JSON.stringify(predictions[index]);
             }
             
