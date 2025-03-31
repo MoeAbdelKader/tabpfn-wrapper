@@ -115,37 +115,37 @@
 
 *   **Goal:** Get the working API deployed and accessible on Google Cloud Platform.
 *   [x] Choose Deployment Target: Decided on **Google Cloud Run**.
-*   [ ] **GCP Project Setup:** Ensure a GCP project is available and configured.
-*   [ ] **Database Setup (Cloud SQL):**
-    *   [ ] Provision a Google Cloud SQL for PostgreSQL instance.
-    *   [ ] Create the production database (e.g., `tabpfn_wrapper_prod`).
-    *   [ ] Configure user and secure password.
-    *   [ ] Note connection details (Instance Connection Name, User, Password, DB Name).
-*   [ ] **Secret Management (Secret Manager):**
-    *   [ ] Enable Secret Manager API.
-    *   [ ] Store sensitive environment variables (`DATABASE_URL`, `SECRET_KEY`, etc.) as secrets.
-*   [ ] **Container Registry Setup (Artifact Registry):**
-    *   [ ] Enable Artifact Registry API.
-    *   [ ] Create a Docker repository in Artifact Registry.
-*   [ ] **Build Production Docker Image:**
-    *   [ ] Optimize `Dockerfile` (multi-stage build, remove dev dependencies, non-root user, prod entrypoint).
-*   [ ] **Push Image to Registry:**
-    *   [ ] Configure Docker authentication for Artifact Registry (`gcloud auth configure-docker`).
-    *   [ ] Build and tag the optimized image.
-    *   [ ] Push the image to the Artifact Registry repository.
-*   [ ] **Deploy Container (Cloud Run):**
-    *   [ ] Create a new Cloud Run service.
-    *   [ ] Configure service to use the image from Artifact Registry.
-    *   [ ] Inject secrets from Secret Manager as environment variables.
-    *   [ ] Configure Cloud SQL connection (preferably using Cloud SQL Auth Proxy sidecar).
-    *   [ ] Set appropriate CPU/memory/scaling settings.
-    *   [ ] Deploy the service.
-*   [ ] **Test Deployed API:**
-    *   [ ] Perform sanity checks using the public Cloud Run URL (`/health`, `/auth/setup`, `/models/fit`, `/models/{model_id}/predict`).
-*   [ ] **Set up Basic Monitoring:**
-    *   [ ] Review default metrics in Cloud Monitoring (requests, latency, errors).
-    *   [ ] Check logs in Cloud Logging.
-    *   [ ] (Optional) Set up basic alerts for high error rates.
+*   [x] **GCP Project Setup:** Ensure a GCP project is available and configured.
+*   [x] **Database Setup (Cloud SQL):**
+    *   [x] Provision a Google Cloud SQL for PostgreSQL instance.
+    *   [x] Create the production database (e.g., `tabpfn_wrapper_prod`).
+    *   [x] Configure user and secure password.
+    *   [x] Note connection details (Instance Connection Name, User, Password, DB Name).
+*   [x] **Secret Management (Secret Manager):**
+    *   [x] Enable Secret Manager API.
+    *   [x] Store sensitive environment variables (`DATABASE_URL`, `SECRET_KEY`, etc.) as secrets.
+*   [x] **Container Registry Setup (Artifact Registry):**
+    *   [x] Enable Artifact Registry API.
+    *   [x] Create a Docker repository in Artifact Registry.
+*   [x] **Build Production Docker Image:**
+    *   [x] Optimize `Dockerfile` (multi-stage build, remove dev dependencies, non-root user, prod entrypoint).
+*   [x] **Push Image to Registry:**
+    *   [x] Configure Docker authentication for Artifact Registry (`gcloud auth configure-docker`).
+    *   [x] Build and tag the optimized image.
+    *   [x] Push the image to the Artifact Registry repository.
+*   [x] **Deploy Container (Cloud Run):**
+    *   [x] Create a new Cloud Run service.
+    *   [x] Configure service to use the image from Artifact Registry.
+    *   [x] Inject secrets from Secret Manager as environment variables.
+    *   [x] Configure Cloud SQL connection (preferably using Cloud SQL Auth Proxy sidecar).
+    *   [x] Set appropriate CPU/memory/scaling settings.
+    *   [x] Deploy the service.
+*   [x] **Test Deployed API:**
+    *   [x] Perform sanity checks using the public Cloud Run URL (`/health`, `/auth/setup`, `/models/fit`, `/models/{model_id}/predict`).
+*   [x] **Set up Basic Monitoring:**
+    *   [x] Review default metrics in Cloud Monitoring (requests, latency, errors).
+    *   [x] Check logs in Cloud Logging.
+    *   [x] (Optional) Set up basic alerts for high error rates.
 
 ---
 

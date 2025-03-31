@@ -20,34 +20,33 @@ class Settings(BaseSettings):
 
     # --- Core Settings ---
     # PostgreSQL Database Connection URL
-    # Format: postgresql://<user>:<password>@<host>:<port>/<database>
+    # Format (for Cloud Run w/ Auth Proxy): postgresql+psycopg://<user>:<password>@/<database>?host=/cloudsql/<project>:<region>:<instance>
     # NO DEFAULT VALUE - This must be set via environment variable or .env file.
-    DATABASE_URL: PostgresDsn
+    DATABASE_URL: str
 
     @computed_field
     @property
     def ASYNC_DATABASE_URL(self) -> str:
         """Computes the async version of the database URL.
 
-        Replaces 'postgresql://' with 'postgresql+asyncpg://' or similar
+        Replaces 'postgresql://' or 'postgresql+psycopg://' with 'postgresql+asyncpg://'
         based on the driver needed for async SQLAlchemy.
         Requires `asyncpg` library to be installed.
         """
-        # Assuming DATABASE_URL is a pydantic PostgresDsn object
-        # Need to replace the scheme
-        # Be careful if the URL already contains a driver specifier
         sync_url = str(self.DATABASE_URL)
         if sync_url.startswith("postgresql://"):
-            # Replace with the standard asyncpg driver
+            # Replace base scheme with asyncpg
             return sync_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        # Add more cases here if other sync drivers need mapping (e.g., psycopg2)
-        elif sync_url.startswith("postgresql+psycopg2://"):
+        elif sync_url.startswith("postgresql+psycopg://"): # Handle psycopg scheme
+            # Replace psycopg scheme with asyncpg
+            return sync_url.replace("postgresql+psycopg://", "postgresql+asyncpg://", 1)
+        elif sync_url.startswith("postgresql+psycopg2://"): # Handle psycopg2 scheme
+            # Replace psycopg2 scheme with asyncpg
              return sync_url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
         elif sync_url.startswith("postgresql+asyncpg://"): # Already async
             return sync_url
         else:
-            # Raise error or return original if format is unexpected
-            # Returning original might lead to errors later, better to raise
+            # Raise error if format is unexpected
             raise ValueError(f"Unsupported DATABASE_URL scheme for async conversion: {sync_url}")
 
     # Secret key for cryptographic operations (e.g., token encryption, JWT)
