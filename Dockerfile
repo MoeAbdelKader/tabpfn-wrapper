@@ -56,6 +56,9 @@ COPY --chown=appuser:appuser main.py .
 # Create the static directory needed by the application and ensure the appuser owns it
 RUN mkdir /app/static && chown appuser:appuser /app/static
 
+# Create the templates directory needed by the application and ensure the appuser owns it
+RUN mkdir /app/templates && chown appuser:appuser /app/templates
+
 # Ensure the app directory is owned by the appuser
 # RUN chown -R appuser:appuser /app # This might be redundant due to --chown but can be added for safety
 

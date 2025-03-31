@@ -26,7 +26,8 @@ TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
 # Create static and template directories if they don't exist
 # (Useful for initial setup, though typically managed by repo structure)
-os.makedirs(TEMPLATES_DIR, exist_ok=True)
+# The line below is removed as the directory is created in the Dockerfile
+# os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
 # Mount static files directory
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
