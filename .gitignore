@@ -173,3 +173,4 @@ $RECYCLE.BIN/
 *.db-journal
 tests/manual_tests/predict_data.csv
 tests/manual_tests/test_data.csv
+tabpfn-wrapper.code-workspace
