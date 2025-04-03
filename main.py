@@ -2,6 +2,7 @@ import logging # Add logging import
 from fastapi import FastAPI, status
 from fastapi.staticfiles import StaticFiles # <-- Import StaticFiles
 from fastapi.templating import Jinja2Templates # <-- Import Jinja2Templates
+from fastapi.responses import FileResponse # <-- Import FileResponse
 import os # <-- Import os
 
 # Import and call logging setup first
@@ -36,6 +37,19 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # --- End UI Setup ---
+
+# --- Serve robots.txt ---
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt():
+    robots_path = os.path.join(STATIC_DIR, "robots.txt")
+    if os.path.exists(robots_path):
+        return FileResponse(robots_path, media_type="text/plain")
+    else:
+        # Optionally, return a default or an error if file is missing
+        # For simplicity, returning 404 if not found.
+        log.warning(f"robots.txt requested but not found at {robots_path}")
+        return Response(status_code=404)
+# --- End Serve robots.txt ---
 
 # Import database initialization function
 from tabpfn_api.db.database import init_db
